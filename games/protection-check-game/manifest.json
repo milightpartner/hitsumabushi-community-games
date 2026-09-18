@@ -1,0 +1,7 @@
+{
+  "gameId": "protection-check-game",
+  "title": "テスト",
+  "players": { "min": 2, "max": 2, "type": "fixed" },
+  "resultModel": { "type": "single_winner" },
+  "creatorGithub": "8720soichiro"
+}
