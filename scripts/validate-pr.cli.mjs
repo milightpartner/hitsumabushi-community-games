@@ -54,12 +54,20 @@ function readBaseManifest(gameId) {
   return value;
 }
 
+function readHeadFileText(path) {
+  try {
+    return fs.readFileSync(path, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
 if (headMalformedPath) {
   console.error(`❌ ${headMalformedPath} が正しいJSONとして読み込めません。構文を確認してください。`);
   process.exit(1);
 }
 
-const result = validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest });
+const result = validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText });
 
 if (!result.ok) {
   console.error('❌ PR検証に失敗しました:\n');

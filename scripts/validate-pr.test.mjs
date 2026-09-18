@@ -147,6 +147,35 @@ describe('validatePr', () => {
     expect(result.errors.some((e) => e.includes('後から変更できません'))).toBe(true);
   });
 
+  it('rejects an index.html that still points at the dev-harness-only SDK path', () => {
+    const result = validatePr({
+      changedFiles: ['games/my-game/manifest.json', 'games/my-game/index.html'],
+      prAuthor: 'alice',
+      readBaseManifest: () => null,
+      readHeadManifest: () => validManifest(),
+      readHeadFileText: (path) =>
+        path === 'games/my-game/index.html'
+          ? '<script type="importmap">{"imports":{"@milightpartner/hitsumabushi-sdk":"/__hitsumabushi_dev__/sdk.js"}}</script>'
+          : null,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('vendor-sdk'))).toBe(true);
+  });
+
+  it('accepts an index.html that points at a vendored relative SDK path', () => {
+    const result = validatePr({
+      changedFiles: ['games/my-game/manifest.json', 'games/my-game/index.html', 'games/my-game/vendor/hitsumabushi-sdk.js'],
+      prAuthor: 'alice',
+      readBaseManifest: () => null,
+      readHeadManifest: () => validManifest(),
+      readHeadFileText: (path) =>
+        path === 'games/my-game/index.html'
+          ? '<script type="importmap">{"imports":{"@milightpartner/hitsumabushi-sdk":"./vendor/hitsumabushi-sdk.js"}}</script>'
+          : 'class HitsumabushiSDK {}',
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it('rejects an empty diff', () => {
     const result = validatePr({
       changedFiles: [],

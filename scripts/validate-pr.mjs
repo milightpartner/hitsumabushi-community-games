@@ -15,9 +15,11 @@ const RESULT_TYPES = ['single_winner', 'ranked', 'score'];
  *   the game doesn't exist there yet (brand new submission).
  * @param {(gameId: string) => object | null} params.readHeadManifest - same, but from the PR's
  *   HEAD (the content the PR is proposing). null if the PR deletes the manifest entirely.
+ * @param {(path: string) => string | null} params.readHeadFileText - reads an arbitrary changed
+ *   file's raw text content from the PR's HEAD, or null if it doesn't exist / isn't text.
  * @returns {{ ok: boolean, errors: string[], gameId: string | null }}
  */
-export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest }) {
+export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText }) {
   const errors = [];
 
   if (!changedFiles || changedFiles.length === 0) {
@@ -93,6 +95,24 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
       errors.push('新規ゲームの manifest.json には creatorGithub (あなたのGitHubユーザー名) が必須です。');
     } else if (headManifest.creatorGithub.toLowerCase() !== prAuthor.toLowerCase()) {
       errors.push(`manifest.json の creatorGithub ("${headManifest.creatorGithub}") はPR作成者("${prAuthor}")と一致している必要があります。`);
+    }
+  }
+
+  // --- dev-harness-only SDK path check ---
+  // `/__hitsumabushi_dev__/sdk.js` only exists while `npx hitsumabushi dev` is running - a game
+  // deployed with an import map still pointing at it looks fine locally but silently never calls
+  // Hitsumabushi.init() once live (that path 404s on any real host). This exact bug shipped once
+  // (games/just-10-seconds) before this check existed. See `npx hitsumabushi vendor-sdk`.
+  if (typeof readHeadFileText === 'function') {
+    for (const file of changedFiles) {
+      if (!file.startsWith(`games/${gameId}/`) || !file.endsWith('.html')) continue;
+      const content = readHeadFileText(file);
+      if (content && content.includes('__hitsumabushi_dev__')) {
+        errors.push(
+          `${file} が開発ハーネス専用パス(/__hitsumabushi_dev__/sdk.js)を参照しています。本番では404になりゲームが反応しなくなります。`
+          + ' "npx hitsumabushi vendor-sdk" を実行し、生成された vendor/hitsumabushi-sdk.js への相対パスに書き換えてコミットしてください。',
+        );
+      }
     }
   }
 
