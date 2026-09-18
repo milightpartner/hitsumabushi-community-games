@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ジャスト10秒</title>
+  <style>
+    :root {
+      --bg: #0a0b10;
+      --card: rgba(22, 26, 42, 0.9);
+      --accent: #00f0ff;
+      --accent2: #ff007f;
+      --gold: #ffe600;
+      --lime: #39ff14;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      overscroll-behavior: none;
+      overflow: hidden;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      height: 100dvh;
+      padding: 16px;
+      transition: background-color 0.3s;
+    }
+    body.transparent { background-color: transparent !important; }
+
+    .game-card {
+      background: var(--card);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 20px;
+      box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+      padding: 24px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 100%;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+    }
+
+    /* 観戦者向け表示。観戦中はゲーム操作エリアのタップ・クリックを無効化する */
+    .spectator-badge {
+      display: none;
+      align-self: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.12);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      font-size: 0.85rem;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    body.spectating .play-area { pointer-events: none; opacity: 0.85; }
+
+    .title { font-size: clamp(1.1rem, 4vw, 1.4rem); color: var(--accent); }
+    .subtitle { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+    .subtitle strong { color: #fff; }
+
+    .player-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+    .player-chip {
+      --pc: #00f0ff;
+      border: 1px solid var(--pc);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      padding: 6px 10px;
+      min-width: 84px;
+      font-size: 0.75rem;
+    }
+    .player-chip .chip-name { display: block; color: var(--pc); font-weight: 600; }
+    .player-chip .chip-status { display: block; color: var(--muted); margin-top: 2px; }
+    .player-chip.done .chip-status { color: var(--lime); }
+
+    .play-area { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+
+    .stage {
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .stage.hidden-stage { display: none; }
+
+    .timer-display {
+      font-family: 'Courier New', monospace;
+      font-size: clamp(2.6rem, 15vw, 4.2rem);
+      color: var(--accent);
+      text-shadow: 0 0 16px rgba(0, 240, 255, 0.6);
+      letter-spacing: 2px;
+    }
+    .timer-display.blind {
+      color: var(--accent2);
+      text-shadow: 0 0 16px rgba(255, 0, 127, 0.6);
+      animation: pulse 1.1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+    .stage-hint { font-size: 0.8rem; color: var(--muted); min-height: 1.2em; }
+
+    .action-btn {
+      min-width: 160px;
+      min-height: 52px;
+      padding: 12px 24px;
+      border-radius: 14px;
+      border: none;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #0a0b10;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    .action-btn:active { transform: scale(0.96); }
+    .action-btn.stop { background: var(--accent2); color: #fff; }
+    .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .my-result { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+
+    .leaderboard-panel { display: none; flex-direction: column; gap: 8px; }
+    .leaderboard-panel.show { display: flex; }
+    .leaderboard-title { font-size: 1rem; color: var(--gold); }
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 0.85rem;
+    }
+    .result-row.winner {
+      border: 1px solid var(--gold);
+      box-shadow: 0 0 14px rgba(255, 230, 0, 0.35);
+    }
+    .result-row .rank { width: 1.6em; }
+    .result-row .name { flex: 1; text-align: left; }
+    .result-row .time { color: var(--accent); font-family: 'Courier New', monospace; }
+    .result-row .diff { color: var(--muted); font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="game-card">
+    <div class="spectator-badge">👀 観戦中</div>
+    <h2 class="title">🎯 ジャスト10秒</h2>
+    <p class="subtitle">
+      スタートすると計測開始。最初の<strong>2秒</strong>だけ数字が見えます。<br>
+      それ以降は数字が隠れるので、感覚だけで<strong>ちょうど10.000秒</strong>を狙ってストップ！<br>
+      全員が計測を終えたら、最も10秒に近かった人の勝ち。
+    </p>
+
+    <div class="player-list" id="playerList"></div>
+
+    <!-- 操作可能なUIは .play-area の中に置く（観戦時に自動でロックされる） -->
+    <div class="play-area" id="playArea">
+      <div class="stage" id="mainStage">
+        <div class="timer-display" id="timerDisplay">0.00</div>
+        <div class="stage-hint" id="stageHint">「スタート」を押して計測開始</div>
+      </div>
+      <button class="action-btn" id="actionBtn">▶ スタート</button>
+      <div class="my-result" id="myResult"></div>
+    </div>
+
+    <div class="leaderboard-panel" id="leaderboardPanel">
+      <div class="leaderboard-title">🏆 リザルト</div>
+      <div id="leaderboard"></div>
+    </div>
+  </div>
+
+  <!--
+    @milightpartner/hitsumabushi-sdk をESM importで使う。
+    下のimport mapは `npm run dev`（= `hitsumabushi dev`）が配信するSDKを指しており、
+    これによりバンドラなしでこのHTMLをそのまま開発ハーネスで動かせる。
+    Vite等のバンドラを導入する場合、bare importはビルド時に解決されるため
+    このimport mapは使われなくなる（削除してよい）。
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@milightpartner/hitsumabushi-sdk": "/__hitsumabushi_dev__/sdk.js"
+    }
+  }
+  </script>
+  <script type="module">
+    import { Hitsumabushi } from '@milightpartner/hitsumabushi-sdk';
+
+    const TARGET_MS = 10000;
+    const VISIBLE_MS = 2000;
+    const AUTO_STOP_MS = 30000;
+    const HEARTBEAT_MS = 3000;
+
+    let myPlayerId = 'p1';
+    let isSpectator = false;
+    let players = [];
+    let isGameOver = false;
+
+    // waiting -> running -> hidden -> done
+    let phase = 'waiting';
+    let startPerf = 0;
+    let rafId = null;
+    let autoStopTimer = null;
+    let heartbeatTimer = null;
+    let cpuTimeouts = [];
+    let results = {};
+
+    const els = {
+      playerList: document.getElementById('playerList'),
+      timerDisplay: document.getElementById('timerDisplay'),
+      stageHint: document.getElementById('stageHint'),
+      actionBtn: document.getElementById('actionBtn'),
+      myResult: document.getElementById('myResult'),
+      mainStage: document.getElementById('mainStage'),
+      leaderboardPanel: document.getElementById('leaderboardPanel'),
+      leaderboard: document.getElementById('leaderboard'),
+    };
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    function resetState() {
+      phase = 'waiting';
+      startPerf = 0;
+      results = {};
+      isGameOver = false;
+
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      if (autoStopTimer) clearTimeout(autoStopTimer);
+      autoStopTimer = null;
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+      cpuTimeouts.forEach((id) => clearTimeout(id));
+      cpuTimeouts = [];
+
+      els.timerDisplay.className = 'timer-display';
+      els.timerDisplay.textContent = '0.00';
+      els.stageHint.textContent = '「スタート」を押して計測開始';
+      els.mainStage.classList.remove('hidden-stage');
+      els.actionBtn.textContent = '▶ スタート';
+      els.actionBtn.className = 'action-btn';
+      els.actionBtn.disabled = isSpectator;
+      els.myResult.textContent = '';
+      els.leaderboardPanel.classList.remove('show');
+      els.leaderboard.innerHTML = '';
+    }
+
+    function renderPlayerList() {
+      els.playerList.innerHTML = players.map((p) => {
+        const isMe = p.id === myPlayerId;
+        return `<div class="player-chip" id="chip-${p.id}" style="--pc:${p.color || '#00f0ff'}">
+          <span class="chip-name">${escapeHtml(p.name)}${isMe ? '（あなた）' : ''}${p.isCpu ? ' 🤖' : ''}</span>
+          <span class="chip-status" id="status-${p.id}">待機中</span>
+        </div>`;
+      }).join('');
+    }
+
+    function updatePlayerChip(playerId, text, done) {
+      const chip = document.getElementById(`chip-${playerId}`);
+      const status = document.getElementById(`status-${playerId}`);
+      if (!chip || !status) return;
+      status.textContent = text;
+      chip.classList.toggle('done', !!done);
+    }
+
+    function updateStatusDisplay() {
+      players.forEach((p) => {
+        if (results[p.id] != null) {
+          updatePlayerChip(p.id, '計測終了・結果待ち', true);
+        }
+      });
+    }
+
+    Hitsumabushi.init({
+      onInitGame(config) {
+        // ⚠️ onInitGame はリマッチ時にも再度呼び出されるため、毎回内部状態を初期化する
+        myPlayerId = config.localPlayerId;
+        players = config.players || [];
+
+        isSpectator = Hitsumabushi.isSpectator();
+        document.body.classList.toggle('spectating', isSpectator);
+        if (config.isObsMode) document.body.classList.add('transparent');
+
+        resetState();
+        renderPlayerList();
+        runCpuPlayers();
+        startHeartbeat();
+      },
+      onObsModeChange(isObs) {
+        document.body.classList.toggle('transparent', isObs);
+      },
+      onGameData(payload, senderId) {
+        if (!payload || typeof payload !== 'object') return;
+        if (payload.type === 'RESULT') {
+          handleIncomingResult(payload, senderId);
+        } else if (payload.type === 'STATE_SYNC') {
+          handleStateSync(payload, senderId);
+        }
+      },
+    });
+
+    function isCpuId(playerId) {
+      const p = players.find((pl) => pl.id === playerId);
+      return !!(p && p.isCpu);
+    }
+
+    function hostPlayerId() {
+      return players[0] && players[0].id;
+    }
+
+    // 送信元の正当性チェック：本人の申告 or （CPUの結果を代弁できる）ホストからの送信のみ信頼する
+    function handleIncomingResult(payload, senderId) {
+      const { playerId, elapsedMs } = payload;
+      if (typeof playerId !== 'string' || typeof elapsedMs !== 'number') return;
+      if (!players.some((p) => p.id === playerId)) return;
+      const trusted = senderId === playerId || (isCpuId(playerId) && senderId === hostPlayerId());
+      if (!trusted) return;
+      recordResult(playerId, elapsedMs);
+    }
+
+    // 途中参加の観戦者・再接続したプレイヤーがホストの心拍配信から結果を復元できるようにする
+    function handleStateSync(payload, senderId) {
+      if (senderId !== hostPlayerId()) return;
+      const incoming = payload.results || {};
+      Object.keys(incoming).forEach((pid) => recordResult(pid, incoming[pid]));
+    }
+
+    function recordResult(playerId, elapsedMs) {
+      if (results[playerId] != null) return;
+      results[playerId] = elapsedMs;
+      updateStatusDisplay();
+      checkAllDone();
+    }
+
+    function submitResult(playerId, elapsedMs) {
+      recordResult(playerId, elapsedMs);
+      Hitsumabushi.sendGameData({ type: 'RESULT', playerId, elapsedMs });
+    }
+
+    function runCpuPlayers() {
+      if (!Hitsumabushi.isHost()) return;
+      players.filter((p) => p.isCpu).forEach((cpu) => {
+        const startDelay = 400 + Math.random() * 1200;
+        const timeoutId = setTimeout(() => {
+          if (isGameOver || results[cpu.id] != null) return;
+          const noise = (Math.random() - 0.5) * 2 * 1800; // ±1.8秒程度のブレ
+          const elapsedMs = Math.max(500, TARGET_MS + noise);
+          submitResult(cpu.id, elapsedMs);
+        }, startDelay);
+        cpuTimeouts.push(timeoutId);
+      });
+    }
+
+    function startHeartbeat() {
+      if (!Hitsumabushi.isHost()) return;
+      heartbeatTimer = setInterval(() => {
+        if (isGameOver) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+          return;
+        }
+        Hitsumabushi.sendGameData({ type: 'STATE_SYNC', results });
+      }, HEARTBEAT_MS);
+    }
+
+    function checkAllDone() {
+      if (isGameOver) return;
+      if (players.length === 0 || Object.keys(results).length < players.length) return;
+      isGameOver = true;
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+      renderLeaderboard();
+      if (Hitsumabushi.isHost()) finalizeGameOverAsHost();
+    }
+
+    function renderLeaderboard() {
+      const sorted = players.slice().sort((a, b) =>
+        Math.abs(results[a.id] - TARGET_MS) - Math.abs(results[b.id] - TARGET_MS)
+      );
+      els.leaderboard.innerHTML = sorted.map((p, i) => {
+        const elapsed = results[p.id];
+        const diff = Math.abs(elapsed - TARGET_MS);
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '　';
+        return `<div class="result-row ${i === 0 ? 'winner' : ''}">
+          <span class="rank">${medal}</span>
+          <span class="name">${escapeHtml(p.name)}${p.id === myPlayerId ? '（あなた）' : ''}</span>
+          <span class="time">${(elapsed / 1000).toFixed(3)}s</span>
+          <span class="diff">誤差 ${(diff / 1000).toFixed(3)}s</span>
+        </div>`;
+      }).join('');
+      els.leaderboardPanel.classList.add('show');
+      els.mainStage.classList.add('hidden-stage');
+      els.actionBtn.disabled = true;
+      els.actionBtn.textContent = '結果発表！';
+    }
+
+    function finalizeGameOverAsHost() {
+      let winnerId = null;
+      let bestDiff = Infinity;
+      const scores = {};
+      players.forEach((p) => {
+        const elapsed = results[p.id];
+        scores[p.id] = Math.round(elapsed);
+        const diff = Math.abs(elapsed - TARGET_MS);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          winnerId = p.id;
+        }
+      });
+      Hitsumabushi.sendScoreUpdate(scores);
+      Hitsumabushi.sendGameOver({
+        winnerPlayerId: winnerId,
+        scores,
+        stats: { targetMs: TARGET_MS, results },
+      });
+    }
+
+    function tick() {
+      const elapsedMs = performance.now() - startPerf;
+      if (phase === 'running' && elapsedMs >= VISIBLE_MS) {
+        enterHiddenPhase();
+      }
+      if (phase === 'running') {
+        els.timerDisplay.textContent = (elapsedMs / 1000).toFixed(2);
+      }
+      if (phase === 'running' || phase === 'hidden') {
+        rafId = requestAnimationFrame(tick);
+      }
+    }
+
+    function enterHiddenPhase() {
+      phase = 'hidden';
+      els.timerDisplay.textContent = '??.??';
+      els.timerDisplay.classList.add('blind');
+      els.stageHint.textContent = '感覚だけが頼り…10秒ぴったりで「ストップ」！';
+    }
+
+    function onStartClicked() {
+      if (isSpectator || phase !== 'waiting' || isGameOver) return;
+      phase = 'running';
+      startPerf = performance.now();
+      els.timerDisplay.classList.remove('blind');
+      els.stageHint.textContent = '数字が見えるのは最初の2秒だけ！';
+      els.actionBtn.textContent = '⏹ ストップ！';
+      els.actionBtn.classList.add('stop');
+      autoStopTimer = setTimeout(() => finishMyRun(true), AUTO_STOP_MS);
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function onStopClicked() {
+      if (phase !== 'running' && phase !== 'hidden') return;
+      finishMyRun(false);
+    }
+
+    function finishMyRun(auto) {
+      if (phase === 'done') return;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      if (autoStopTimer) clearTimeout(autoStopTimer);
+      autoStopTimer = null;
+
+      const elapsedMs = performance.now() - startPerf;
+      phase = 'done';
+      els.timerDisplay.classList.remove('blind');
+      els.timerDisplay.textContent = (elapsedMs / 1000).toFixed(3);
+      els.stageHint.textContent = auto ? '時間切れで自動ストップしました' : '計測終了！';
+      els.actionBtn.disabled = true;
+      els.actionBtn.textContent = '結果送信済み';
+      els.myResult.textContent =
+        'あなたの記録: ' + (elapsedMs / 1000).toFixed(3) + '秒（他のプレイヤーの計測が終わるまでお待ちください）';
+
+      submitResult(myPlayerId, elapsedMs);
+    }
+
+    els.actionBtn.addEventListener('click', () => {
+      if (phase === 'waiting') onStartClicked();
+      else if (phase === 'running' || phase === 'hidden') onStopClicked();
+    });
+  </script>
+</body>
+</html>
