@@ -15,10 +15,11 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  # action-hosting-deploy posts its preview-URL comment via the Issues API (GitHub treats
-  # PR conversation comments as issue comments) - pull-requests: write alone isn't enough,
-  # and the job fails outright with "Resource not accessible by integration" without this.
-  issues: write
+  # action-hosting-deploy reports its own progress via a custom Check Run (POST
+  # /check-runs), which needs `checks: write` specifically - confirmed from the actual
+  # 403 response's `x-accepted-github-permissions: checks=write` header. pull-requests:
+  # write alone fails with "Resource not accessible by integration".
+  checks: write
 
 jobs:
   preview:
