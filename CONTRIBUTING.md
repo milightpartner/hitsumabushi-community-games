@@ -20,6 +20,7 @@
 - ゲームID(ディレクトリ名)は半角英数小文字とハイフンのみ(`kebab-case`)。
 - `manifest.json` は [ゲームマニフェスト仕様書](https://github.com/milightpartner/OmoshiroGamePortal/blob/main/packages/hitsumabushi-sdk/docs/game-manifest-spec.md) に準拠している必要があります。
 - **一度設定した `creatorGithub` は変更できません**。他人が作ったゲームのディレクトリを、別のGitHubアカウントから変更することはできません(なりすまし防止)。
+- **バンドラを使わない場合、`index.html`のimport mapが`/__hitsumabushi_dev__/sdk.js`を指したままではいけません**。これは`npx hitsumabushi dev`(ローカル開発ハーネス)専用のパスで、本番では404になりゲームが一切反応しなくなります(`npx hitsumabushi vendor-sdk`で生成される`vendor/hitsumabushi-sdk.js`への相対パスにしてください)。`hitsumabushi-game-starter`をそのまま使っていれば`npm install`時に自動対応済みなので、通常は意識する必要はありません。
 
 これらを満たさないPRは、CIチェック(`Validate PR`)が失敗し、マージできません。
 
