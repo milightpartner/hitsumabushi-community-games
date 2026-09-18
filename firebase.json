@@ -1,0 +1,13 @@
+{
+  "hosting": {
+    "site": "hitu-mabusi-community",
+    "public": "games",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "/*/manifest.json",
+        "headers": [{ "key": "Access-Control-Allow-Origin", "value": "*" }]
+      }
+    ]
+  }
+}

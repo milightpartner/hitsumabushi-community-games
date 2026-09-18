@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>マイ・ひつまぶしゲーム</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0a0b10;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      transition: background-color 0.3s;
+    }
+    body.transparent { background-color: transparent !important; }
+    .game-card {
+      background: rgba(22, 26, 42, 0.9);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      padding: 32px;
+      border-radius: 20px;
+      text-align: center;
+      box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+    }
+    .title { font-size: 1.3rem; color: #00f0ff; margin-bottom: 12px; }
+    .status { font-size: 1rem; color: #94a3b8; }
+
+    /* 観戦者向け表示。観戦中はゲーム操作エリアのタップ・クリックを無効化する */
+    .spectator-badge {
+      display: none;
+      margin-bottom: 12px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.12);
+      border: 1px solid #ffe600;
+      color: #ffe600;
+      font-size: 0.85rem;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    body.spectating .play-area { pointer-events: none; opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <div class="game-card">
+    <div class="spectator-badge">👀 観戦中</div>
+    <h2 class="title" id="playerTitle">接続中...</h2>
+    <div class="status" id="statusMsg">ここにゲームロジックを実装してください</div>
+    <!-- 操作可能なUIは .play-area の中に置く（観戦時に自動でロックされる） -->
+    <div class="play-area" id="playArea"></div>
+  </div>
+
+  <!--
+    @milightpartner/hitsumabushi-sdk をESM importで使う。
+    下のimport mapは `npm run dev`（= `hitsumabushi dev`）が配信するSDKを指しており、
+    これによりバンドラなしでこのHTMLをそのまま開発ハーネスで動かせる。
+    Vite等のバンドラを導入する場合、bare importはビルド時に解決されるため
+    このimport mapは使われなくなる（削除してよい）。
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@milightpartner/hitsumabushi-sdk": "/__hitsumabushi_dev__/sdk.js"
+    }
+  }
+  </script>
+  <script type="module">
+    import { Hitsumabushi } from '@milightpartner/hitsumabushi-sdk';
+
+    let myPlayerId = 'p1';
+    let isSpectator = false;
+
+    Hitsumabushi.init({
+      onInitGame: (config) => {
+        // ⚠️ 必須: onInitGame はリマッチ（再戦）時にも再度呼び出されます。
+        // ここでゲーム状態（盤面・スコア・タイマー等）を初期状態にリセットしてください。
+        myPlayerId = config.localPlayerId;
+
+        // ⚠️ 必須: 観戦者は対戦スロットに着席していないため、操作をロックし
+        // 観戦中であることを明示する（SDK側でも送信は自動的に遮断されます）。
+        isSpectator = Hitsumabushi.isSpectator();
+        document.body.classList.toggle('spectating', isSpectator);
+
+        const me = config.players?.find((p) => p.id === myPlayerId);
+        document.getElementById('playerTitle').textContent = isSpectator
+          ? '観戦中'
+          : (me ? me.name : 'あなた');
+        document.getElementById('statusMsg').textContent = isSpectator
+          ? '対戦の様子を観戦しています'
+          : 'ここにゲームロジックを実装してください';
+
+        if (config.isObsMode) document.body.classList.add('transparent');
+      },
+      onObsModeChange: (isObs) => {
+        document.body.classList.toggle('transparent', isObs);
+      },
+      onGameData: (payload, senderId) => {
+        // 相手プレイヤーから中継パケットを受信した時の処理をここに書く
+      },
+    });
+
+    // 相手へデータを送りたい時:
+    // Hitsumabushi.sendGameData({ type: 'MOVE', /* ... */ });
+    // ⚠️ 上限は 32KB/パケット・60パケット/秒（Hitsumabushi.limits で参照可）。
+    //    毎フレーム送信は上限に張り付くため、送信間隔を間引くこと。
+
+    // スコアを更新したい時:
+    // Hitsumabushi.sendScoreUpdate({ p1: 1, p2: 0 });
+
+    // 勝敗が決まった時（必ず1回だけ呼ぶ）:
+    // Hitsumabushi.sendGameOver({ winnerPlayerId: myPlayerId, scores: { p1: 1, p2: 0 } });
+  </script>
+</body>
+</html>

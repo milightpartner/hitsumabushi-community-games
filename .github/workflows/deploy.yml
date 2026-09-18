@@ -1,0 +1,65 @@
+name: Deploy
+
+# Firebase deploys need a service account secret, which GitHub never exposes to a PR built
+# from a fork (see pr-validate.yml for the fork-safe validation check that runs regardless).
+# So: preview channels only happen for PRs from branches within this repo itself (trusted
+# collaborators); a fork contributor tests locally via `npx hitsumabushi dev` instead, and
+# their game only actually reaches Firebase once a maintainer merges the PR to main.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    name: Deploy Preview Channel
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_HITU_MABUSI }}'
+          projectId: hitu-mabusi
+          expires: 7d
+
+  preview_skipped_notice:
+    name: Note Preview Skipped (fork PR)
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "外部フォークからのPRのため、Firebase Previewチャンネルは発行されません。"
+          echo "npx hitsumabushi dev でローカルに動作確認してください。マージ後、本番サイトに反映されます。"
+
+  cleanup_preview_on_close:
+    name: Delete Preview Channel on PR Close
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_HITU_MABUSI }}'
+          projectId: hitu-mabusi
+
+  deploy_live:
+    name: Deploy to Live
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_HITU_MABUSI }}'
+          channelId: live
+          projectId: hitu-mabusi

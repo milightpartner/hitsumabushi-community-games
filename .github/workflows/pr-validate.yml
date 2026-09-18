@@ -1,0 +1,40 @@
+name: Validate PR
+
+# Runs entirely on static analysis (file paths + manifest.json contents) - no secrets
+# involved, so this works identically for PRs from forks. This is the one CI check that
+# branch protection requires before a PR can be merged.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.event.pull_request.base.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Validate PR contents (path restrictions, single-game diff, manifest schema, ownership)
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+        run: npm run validate-pr

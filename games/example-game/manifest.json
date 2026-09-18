@@ -1,0 +1,16 @@
+{
+  "gameId": "example-game",
+  "title": "サンプルゲーム",
+  "version": "0.1.0",
+  "players": {
+    "min": 2,
+    "max": 2,
+    "type": "fixed",
+    "allowCpuFill": false
+  },
+  "resultModel": {
+    "type": "single_winner",
+    "allowTie": false
+  },
+  "creatorGithub": "milightpartner"
+}
