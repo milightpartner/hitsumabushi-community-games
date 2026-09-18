@@ -187,22 +187,15 @@
   </div>
 
   <!--
-    @milightpartner/hitsumabushi-sdk をESM importで使う。
-    下のimport mapは `npm run dev`（= `hitsumabushi dev`）が配信するSDKを指しており、
-    これによりバンドラなしでこのHTMLをそのまま開発ハーネスで動かせる。
-    Vite等のバンドラを導入する場合、bare importはビルド時に解決されるため
-    このimport mapは使われなくなる（削除してよい）。
+    ひつまぶしSDKを公開URLから読み込む。ビルドもバンドラも不要で、
+    開発ハーネス(`npx hitsumabushi dev`)でも、静的ホストへ置いた本番でも、
+    この1行がそのまま動く。グローバルの `Hitsumabushi` として利用できる。
+    ※ npm + バンドラを使う場合は、代わりに
+       import { Hitsumabushi } from '@milightpartner/hitsumabushi-sdk';
+       と書いてこのscriptタグを削除してよい。
   -->
-  <script type="importmap">
-  {
-    "imports": {
-      "@milightpartner/hitsumabushi-sdk": "./vendor/hitsumabushi-sdk.js"
-    }
-  }
-  </script>
-  <script type="module">
-    import { Hitsumabushi } from '@milightpartner/hitsumabushi-sdk';
-
+  <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script>
+  <script>
     const TARGET_MS = 10000;
     const VISIBLE_MS = 2000;
     const AUTO_STOP_MS = 30000;

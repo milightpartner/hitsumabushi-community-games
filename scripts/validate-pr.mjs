@@ -102,7 +102,8 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
   // `/__hitsumabushi_dev__/sdk.js` only exists while `npx hitsumabushi dev` is running - a game
   // deployed with an import map still pointing at it looks fine locally but silently never calls
   // Hitsumabushi.init() once live (that path 404s on any real host). This exact bug shipped once
-  // (games/just-10-seconds) before this check existed. See `npx hitsumabushi vendor-sdk`.
+  // (games/just-10-seconds) before this check existed. The fix is the public-URL <script> tag
+  // (OmoshiroGamePortal#223/#224) - not vendoring the SDK into the game repo.
   if (typeof readHeadFileText === 'function') {
     for (const file of changedFiles) {
       if (!file.startsWith(`games/${gameId}/`) || !file.endsWith('.html')) continue;
@@ -110,7 +111,7 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
       if (content && content.includes('__hitsumabushi_dev__')) {
         errors.push(
           `${file} が開発ハーネス専用パス(/__hitsumabushi_dev__/sdk.js)を参照しています。本番では404になりゲームが反応しなくなります。`
-          + ' "npx hitsumabushi vendor-sdk" を実行し、生成された vendor/hitsumabushi-sdk.js への相対パスに書き換えてコミットしてください。',
+          + ' <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script> を使う形に書き換えてコミットしてください。',
         );
       }
     }

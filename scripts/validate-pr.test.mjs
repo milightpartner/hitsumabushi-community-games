@@ -159,7 +159,7 @@ describe('validatePr', () => {
           : null,
     });
     expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => e.includes('vendor-sdk'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('milightpartner.jp/sdk/hitsumabushi-sdk.js'))).toBe(true);
   });
 
   it('accepts an index.html that points at a vendored relative SDK path', () => {
