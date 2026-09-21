@@ -4,7 +4,31 @@
 // `git diff` and `git show origin/main:...` can resolve the base branch.
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
+import Ajv from 'ajv';
 import { validatePr } from './validate-pr.mjs';
+
+// The SDK's JSON Schema is authored and versioned in OmoshiroGamePortal (a private repo), so it
+// can't be pulled in as an npm dependency here without exposing a registry token to fork PRs -
+// this repo's whole CI design deliberately avoids that (see pr-validate.yml). It's fetched from
+// its public hosting URL instead, which needs no auth and always reflects the schema actually
+// live on the Portal. See OmoshiroGamePortal#249 for the background.
+const MANIFEST_SCHEMA_URL = 'https://milightpartner.jp/schemas/game-manifest-1.json';
+
+async function loadManifestSchemaValidator() {
+  let schema;
+  try {
+    const res = await fetch(MANIFEST_SCHEMA_URL, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    schema = await res.json();
+  } catch (err) {
+    console.error(`❌ SDKのJSON Schema (${MANIFEST_SCHEMA_URL}) の取得に失敗しました: ${err.message}`);
+    console.error('   ネットワーク接続を確認するか、時間をおいて再実行してください。');
+    process.exit(1);
+  }
+  const ajv = new Ajv({ allErrors: true, strict: false });
+  const validate = ajv.compile(schema);
+  return (manifest) => (validate(manifest) ? [] : validate.errors.map((e) => `${e.instancePath || '(root)'} ${e.message}`));
+}
 
 const baseRef = process.env.BASE_REF || 'origin/main';
 const prAuthor = process.env.PR_AUTHOR;
@@ -83,11 +107,14 @@ if (creatorsMalformed) {
   process.exit(1);
 }
 
+const validateManifestSchema = await loadManifestSchemaValidator();
+
 const result = validatePr({
   changedFiles,
   prAuthor,
   readBaseManifest,
   readHeadManifest,
+  validateManifestSchema,
   readHeadFileText,
   readHeadFileSize,
   creators: creators ?? {},

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePr } from './validate-pr.mjs';
+import { validatePr as validatePrReal } from './validate-pr.mjs';
 
 const validManifest = (overrides = {}) => ({
   gameId: 'my-game',
@@ -9,6 +9,28 @@ const validManifest = (overrides = {}) => ({
   creatorGithub: 'alice',
   ...overrides,
 });
+
+// validatePr() delegates manifest-shape validation to an injected `validateManifestSchema`
+// (the real CLI backs it with the SDK's JSON Schema over ajv - see validate-pr.cli.mjs). These
+// tests are about validatePr()'s own orchestration logic, not the SDK schema's rules (that's
+// covered on the SDK side, in OmoshiroGamePortal's manifestSchema.test.js), so a small stub
+// standing in for "the manifest doesn't match the expected shape" is enough here.
+const fakeValidateManifestSchema = (manifest) => {
+  const errors = [];
+  const players = manifest.players || {};
+  if (!['fixed', 'variable'].includes(players.type)) errors.push('players.type must be "fixed" or "variable"');
+  const resultModel = manifest.resultModel || {};
+  if (!['single_winner', 'ranked', 'score', 'other'].includes(resultModel.type)) {
+    errors.push('resultModel.type must be one of "single_winner", "ranked", "score", "other"');
+  }
+  return errors;
+};
+
+// Every test below only cares about the orchestration logic, so this supplies a passing schema
+// validator by default and lets individual tests override it to exercise the wiring.
+function validatePr(params) {
+  return validatePrReal({ validateManifestSchema: fakeValidateManifestSchema, ...params });
+}
 
 describe('validatePr', () => {
   it('accepts a valid new-game submission', () => {
@@ -97,6 +119,17 @@ describe('validatePr', () => {
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes('players.type'))).toBe(true);
     expect(result.errors.some((e) => e.includes('resultModel.type'))).toBe(true);
+  });
+
+  it('rejects players.max below players.min (a cross-field rule the schema validator cannot express)', () => {
+    const result = validatePr({
+      changedFiles: ['games/my-game/manifest.json'],
+      prAuthor: 'alice',
+      readBaseManifest: () => null,
+      readHeadManifest: () => validManifest({ players: { min: 4, max: 2, type: 'fixed' } }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('players.max'))).toBe(true);
   });
 
   it('rejects a new submission missing creatorGithub', () => {
