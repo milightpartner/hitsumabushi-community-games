@@ -1,6 +1,7 @@
 // Pure validation logic for a community-games PR, kept separate from any I/O so it can be
 // unit-tested without a real git checkout or GitHub API call. See validate-pr.cli.mjs for the
 // actual CI entry point that gathers changedFiles/readBaseManifest/readHeadManifest for real.
+import { validateGuide } from './validate-guide.mjs';
 
 const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const PLAYERS_TYPES = ['fixed', 'variable'];
@@ -17,9 +18,11 @@ const RESULT_TYPES = ['single_winner', 'ranked', 'score'];
  *   HEAD (the content the PR is proposing). null if the PR deletes the manifest entirely.
  * @param {(path: string) => string | null} params.readHeadFileText - reads an arbitrary changed
  *   file's raw text content from the PR's HEAD, or null if it doesn't exist / isn't text.
+ * @param {(path: string) => number | null} [params.readHeadFileSize] - size in bytes of a file at
+ *   the PR's HEAD, or null if it doesn't exist. Used for guide.md's image checks.
  * @returns {{ ok: boolean, errors: string[], gameId: string | null }}
  */
-export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText }) {
+export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText, readHeadFileSize }) {
   const errors = [];
 
   if (!changedFiles || changedFiles.length === 0) {
@@ -114,6 +117,16 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
           + ' <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script> を使う形に書き換えてコミットしてください。',
         );
       }
+    }
+  }
+
+  // --- guide.md (optional explainer article) ---
+  // Checked whenever it exists at HEAD, not only when this PR changed it, so the game is never
+  // deployed next to a guide that no longer passes the current rules.
+  if (typeof readHeadFileText === 'function') {
+    const guideText = readHeadFileText(`games/${gameId}/guide.md`);
+    if (guideText !== null && guideText !== undefined) {
+      errors.push(...validateGuide({ gameId, text: guideText, readFileSize: readHeadFileSize }));
     }
   }
 

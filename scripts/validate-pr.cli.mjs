@@ -62,12 +62,21 @@ function readHeadFileText(path) {
   }
 }
 
+function readHeadFileSize(path) {
+  try {
+    const stat = fs.statSync(path);
+    return stat.isFile() ? stat.size : null;
+  } catch {
+    return null;
+  }
+}
+
 if (headMalformedPath) {
   console.error(`❌ ${headMalformedPath} が正しいJSONとして読み込めません。構文を確認してください。`);
   process.exit(1);
 }
 
-const result = validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText });
+const result = validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText, readHeadFileSize });
 
 if (!result.ok) {
   console.error('❌ PR検証に失敗しました:\n');
