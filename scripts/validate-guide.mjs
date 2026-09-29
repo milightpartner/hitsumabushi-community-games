@@ -23,7 +23,7 @@ const ALLOWED_KEYS = ['gameId', 'title', 'description', 'quickRules'];
 // Keys an existing article pipeline understands but a creator must not set themselves - e.g.
 // `slug` could collide with (hijack) another article's URL, `author` could impersonate someone.
 const RESERVED_KEY_REASONS = {
-  slug: '記事のURLは <gameId>-guide に固定されます',
+  slug: '記事のURLはゲームIDから自動で決まります',
   category: 'カテゴリは自動で決まります',
   author: 'なりすまし防止のため、作者名は manifest.json の creatorGithub から決まります',
   isStaging: '公開状態は運営が管理します',
@@ -193,13 +193,21 @@ function checkImageUrl(errors, label, url, at, { gameId, readFileSize }) {
   }
   if (typeof readFileSize !== 'function') return;
 
-  const path = `games/${gameId}/${segments.filter((s) => s && s !== '.').join('/')}`;
+  const path = `games/${gameId}/${guideImagePath(url)}`;
   const size = readFileSize(path);
   if (size === null || size === undefined) {
     invalid(`${path} が見つかりません。`);
   } else if (size > GUIDE_LIMITS.maxImageBytes) {
     invalid(`ファイルが大きすぎます(${formatKb(size)})。1枚あたり${formatKb(GUIDE_LIMITS.maxImageBytes)}以下にしてください。`);
   }
+}
+
+/**
+ * Normalizes a guide image URL that already passed checkImageUrl (relative, no `..`) to a path
+ * relative to the game directory, e.g. "./images/a.png" -> "images/a.png".
+ */
+export function guideImagePath(url) {
+  return url.split('/').filter((s) => s && s !== '.').join('/');
 }
 
 function visit(node, fn) {
