@@ -5,12 +5,24 @@ name: Deploy
 # So: preview channels only happen for PRs from branches within this repo itself (trusted
 # collaborators); a fork contributor tests locally via `npx hitsumabushi dev` instead, and
 # their game only actually reaches Firebase once a maintainer merges the PR to main.
+#
+# firebase.json configures two sites, and every deploy below updates both: the games site
+# (games/ as-is) and the article site (dist-articles/, generated from guide.md by
+# `npm run build:articles`, OmoshiroGamePortal#382).
+#
+# Which articles go live depends on the portal catalog (active + url pointing at this repo), not
+# just on this repo's contents - so the live site is also rebuilt daily and can be rebuilt on
+# demand (Actions > Deploy > Run workflow), e.g. right after a game is listed or pulled
+# (status: maintenance) in the catalog.
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, closed]
   push:
     branches: [main]
+  schedule:
+    - cron: '0 18 * * *' # 03:00 JST
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,6 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Previews include every guide (--all): a new game can't be in the catalog before it's
+      # merged, and its article is exactly what a reviewer wants to see.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build:articles -- --all
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
@@ -50,6 +69,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # firebase.json's article site needs its public dir to exist for any deploy.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build:articles -- --all
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
@@ -58,10 +83,17 @@ jobs:
 
   deploy_live:
     name: Deploy to Live
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Fails the whole deploy if the catalog can't be read, rather than publishing articles for
+      # games the portal may have pulled.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build:articles
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
