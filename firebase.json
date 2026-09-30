@@ -12,7 +12,7 @@
       ]
     },
     {
-      "site": "hitu-mabusi-articles",
+      "site": "hitu-mabusi-guides",
       "public": "dist-articles",
       "trailingSlash": true,
       "headers": [
@@ -26,7 +26,7 @@
           ]
         },
         {
-          "source": "/articles.json",
+          "source": "/guides.json",
           "headers": [
             { "key": "Access-Control-Allow-Origin", "value": "*" },
             { "key": "Cache-Control", "value": "public, max-age=300" }
