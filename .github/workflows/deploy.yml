@@ -78,6 +78,13 @@ jobs:
   deploy_live:
     name: Deploy to Live
     if: github.event_name == 'push'
+    # Each deploy replaces the whole site with that commit's tree, so two live deploys running at
+    # once (e.g. several PRs merged back to back) could finish out of order and leave an older
+    # tree live. Run them one at a time; a queued run is superseded by a newer one, which is fine
+    # because the newer commit contains everything the older one did.
+    concurrency:
+      group: deploy-live
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
