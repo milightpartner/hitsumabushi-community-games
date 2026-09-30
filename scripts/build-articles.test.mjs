@@ -44,7 +44,7 @@ describe('buildArticles', () => {
     expect(page).toContain('<link rel="canonical" href="https://guide.milightpartner.jp/my-game/">');
     expect(page).toContain('href="https://milightpartner.jp/?create=my-game"');
     expect(page).toContain('adsbygoogle.js?client=ca-pub-');
-    expect(page).toContain('https://github.com/alice');
+    expect(page).toContain('著者: alice');
 
     expect(file(result, 'index.html')).toContain('href="/my-game/"');
     expect(file(result, 'sitemap.xml')).toContain('<loc>https://guide.milightpartner.jp/my-game/</loc>');
@@ -87,6 +87,40 @@ describe('buildArticles', () => {
     const page = file(result, 'my-game/index.html');
     expect(page).not.toContain('<img src=x');
     expect(page).toContain('&lt;img src=x onerror=alert(1)&gt;');
+  });
+
+  it('lays the page out like the portal article: play card before the body, play button after', () => {
+    const page = file(build(), 'my-game/index.html');
+    const card = page.indexOf('この記事のゲームですぐに対戦！');
+    const body = page.indexOf('article-markdown-body');
+    const footerPlay = page.indexOf('「マイゲーム」を遊ぶ');
+    expect(card).toBeGreaterThan(-1);
+    expect(card).toBeLessThan(body);
+    expect(footerPlay).toBeGreaterThan(body);
+    expect(page.match(/href="https:\/\/milightpartner\.jp\/\?create=my-game"/g)).toHaveLength(2);
+    expect(page).toContain('🎮 ゲーム解説');
+  });
+
+  it('shows the publish date in JST and the tags', () => {
+    const result = build({
+      games: [{
+        gameId: 'my-game',
+        guideText: guideText(undefined, 'tags: ["攻略", "2人対戦"]\n'),
+        manifest,
+        publishedAt: '2026-09-18T18:02:16Z', // 2026-09-19 03:02 JST
+      }],
+    });
+    const page = file(result, 'my-game/index.html');
+    expect(page).toContain('公開: 2026年9月19日');
+    expect(page).toContain('<meta property="article:published_time" content="2026-09-18T18:02:16Z">');
+    expect(page).toContain('<span class="article-tag">#攻略</span><span class="article-tag">#2人対戦</span>');
+    expect(result.articles[0]).toMatchObject({ tags: ['攻略', '2人対戦'], publishedAt: '2026-09-18T18:02:16Z' });
+  });
+
+  it('omits the date when it is unknown', () => {
+    const page = file(build(), 'my-game/index.html');
+    expect(page).not.toContain('公開:');
+    expect(page).not.toContain('article:published_time');
   });
 
   it('passes quickRules through as raw Markdown for the portal rules panel', () => {
