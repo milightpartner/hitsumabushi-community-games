@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ネオン・ターゲットラッシュ - Neon Target Rush</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      background-color: #0a0b10;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 8px;
+      transition: background-color 0.3s;
+    }
+
+    body.transparent {
+      background-color: transparent !important;
+    }
+
+    .game-container {
+      width: 100%;
+      max-width: 640px;
+      height: 100%;
+      max-height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    /* 上部 HUD / スコアボード */
+    .hud-card {
+      flex-shrink: 0;
+      background: rgba(22, 26, 42, 0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      border-radius: 16px;
+      padding: 10px 16px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+    }
+
+    .hud-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .game-title {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #00f0ff;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .target-goal-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: rgba(0, 240, 255, 0.15);
+      border: 1px solid #00f0ff;
+      color: #00f0ff;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+
+    .player-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .player-bar-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 36px;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+    }
+
+    .player-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 700;
+    }
+
+    .progress-track {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      height: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 8px;
+      transition: width 0.15s ease-out;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .player-score {
+      font-weight: 900;
+      font-family: monospace;
+      font-size: 0.95rem;
+      text-align: right;
+    }
+
+    /* プレイフィールド */
+    .arena-card {
+      background: rgba(14, 18, 30, 0.9);
+      backdrop-filter: blur(12px);
+      border: 1.5px solid rgba(0, 240, 255, 0.35);
+      border-radius: 20px;
+      position: relative;
+      flex: 1;
+      min-height: 180px;
+      width: 100%;
+      box-shadow: 0 0 35px rgba(0, 240, 255, 0.15), inset 0 0 40px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    .arena-card.stunned {
+      animation: stunShake 0.4s ease-in-out;
+      border-color: #ff0055 !important;
+      box-shadow: 0 0 40px rgba(255, 0, 85, 0.4), inset 0 0 50px rgba(255, 0, 85, 0.2);
+    }
+
+    @keyframes stunShake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-8px) rotate(-1deg); }
+      40% { transform: translateX(8px) rotate(1deg); }
+      60% { transform: translateX(-5px); }
+      80% { transform: translateX(5px); }
+    }
+
+    /* ターゲットスタイル */
+    .target-btn {
+      position: absolute;
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 2px solid #00f0ff;
+      background: radial-gradient(circle, rgba(0, 240, 255, 0.5) 0%, rgba(10, 15, 30, 0.9) 70%);
+      box-shadow: 0 0 20px #00f0ff, inset 0 0 12px #00f0ff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      transition: transform 0.08s ease-out;
+      animation: targetPulse 1.2s infinite alternate ease-in-out;
+      z-index: 10;
+    }
+
+    .target-btn:active {
+      transform: scale(0.9);
+    }
+
+    @keyframes targetPulse {
+      0% { transform: scale(1); box-shadow: 0 0 15px #00f0ff; }
+      100% { transform: scale(1.08); box-shadow: 0 0 28px #00f0ff, 0 0 40px rgba(0, 240, 255, 0.4); }
+    }
+
+    /* 爆弾ボム */
+    .bomb-btn {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 2px solid #ff0055;
+      background: radial-gradient(circle, rgba(255, 0, 85, 0.4) 0%, rgba(20, 5, 15, 0.9) 70%);
+      box-shadow: 0 0 20px #ff0055, inset 0 0 12px #ff0055;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      animation: bombWarning 0.6s infinite alternate ease-in-out;
+      z-index: 9;
+    }
+
+    .bomb-btn:active {
+      transform: scale(0.9);
+    }
+
+    @keyframes bombWarning {
+      0% { transform: scale(1); box-shadow: 0 0 12px #ff0055; border-color: #ff0055; }
+      100% { transform: scale(1.06); box-shadow: 0 0 26px #ff0055, 0 0 35px rgba(255, 0, 85, 0.6); border-color: #ff3377; }
+    }
+
+    /* スタンオーバーレイ */
+    .stun-banner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 0, 85, 0.9);
+      color: #fff;
+      font-weight: 900;
+      font-size: 1.4rem;
+      padding: 10px 24px;
+      border-radius: 12px;
+      box-shadow: 0 0 30px #ff0055;
+      letter-spacing: 2px;
+      display: none;
+      z-index: 50;
+      pointer-events: none;
+      animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    /* 勝利・ゲームオーバーオーバーレイ */
+    .gameover-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 11, 16, 0.88);
+      backdrop-filter: blur(8px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .winner-title {
+      font-size: 2.2rem;
+      font-weight: 900;
+      color: #ffe600;
+      text-shadow: 0 0 20px rgba(255, 230, 0, 0.7);
+      margin-bottom: 8px;
+    }
+
+    .winner-subtitle {
+      font-size: 1.1rem;
+      color: #cbd5e1;
+      margin-bottom: 20px;
+    }
+
+    .status-bar {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      padding: 0 4px;
+    }
+
+    /* 低画面高・モバイル向けレスポンシブ最適化 */
+    @media (max-height: 600px) {
+      .game-container {
+        gap: 6px;
+      }
+      .hud-card {
+        padding: 6px 12px;
+        border-radius: 12px;
+      }
+      .hud-header {
+        margin-bottom: 4px;
+      }
+      .game-title {
+        font-size: 0.85rem;
+      }
+      .target-goal-badge {
+        font-size: 0.7rem;
+        padding: 1px 6px;
+      }
+      .player-bars {
+        gap: 4px;
+      }
+      .player-bar-row {
+        gap: 6px;
+        font-size: 0.75rem;
+        grid-template-columns: 80px 1fr 32px;
+      }
+      .progress-track {
+        height: 8px;
+      }
+      .arena-card {
+        border-radius: 14px;
+        min-height: 150px;
+      }
+      .target-btn {
+        width: 54px;
+        height: 54px;
+        font-size: 1.3rem;
+      }
+      .bomb-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 1.3rem;
+      }
+      .status-bar {
+        font-size: 0.75rem;
+      }
+      .stun-banner {
+        font-size: 1.1rem;
+        padding: 8px 16px;
+      }
+    }
+
+    @media (max-height: 480px) {
+      body {
+        padding: 4px 6px;
+      }
+      .game-container {
+        gap: 4px;
+      }
+      .hud-card {
+        padding: 4px 10px;
+      }
+      .arena-card {
+        min-height: 120px;
+      }
+      .target-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 1.15rem;
+      }
+      .bomb-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 1.15rem;
+      }
+    }
+
+    /* 狭小幅画面（スマホ縦持ち）向け最適化 */
+    @media (max-width: 400px) {
+      .game-title {
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+      }
+      .target-goal-badge {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+      }
+      .player-bar-row {
+        grid-template-columns: 72px 1fr 28px;
+        font-size: 0.75rem;
+      }
+    }
+
+    @keyframes popIn {
+      0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+      100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <!-- 上部スコアボード (2〜4人・チーム戦対応) -->
+    <div class="hud-card">
+      <div class="hud-header">
+        <div class="game-title">
+          <span>⚡ NEON TARGET RUSH</span>
+        </div>
+        <div class="target-goal-badge" id="goalBadge">GOAL: 10 PTS</div>
+      </div>
+      <div class="player-bars" id="playerBars">
+        <!-- JSで動的生成 -->
+      </div>
+    </div>
+
+    <!-- プレイフィールド -->
+    <div class="arena-card" id="arena">
+      <button class="target-btn" id="targetBtn" title="ターゲット">🎯</button>
+      <button class="bomb-btn" id="bombBtn" style="display: none;" title="爆弾トラップ">💣</button>
+      <div class="stun-banner" id="stunBanner">💥 STUNNED! (-1 PT)</div>
+
+      <!-- ゲームオーバー / 勝利表示 -->
+      <div class="gameover-overlay" id="gameoverOverlay">
+        <div class="winner-title" id="winnerTitle">VICTORY! 🎉</div>
+        <div class="winner-subtitle" id="winnerSubtitle">勝者が決定しました！</div>
+      </div>
+    </div>
+
+    <!-- 下部ステータスバー -->
+    <div class="status-bar">
+      <span id="gameModeLabel">個人戦 (最速10点先取)</span>
+      <span id="myStatusLabel">タップしてスタート</span>
+    </div>
+  </div>
+
+  <!-- Hitsumabushi SDK (IIFE build) -->
+  <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script>
+  <script>
+    (function () {
+      // --- 音響システム (Web Audio API) ---
+      var audioCtx = null;
+      function getAudioContext() {
+        if (!audioCtx) {
+          var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            audioCtx = new AudioContextClass();
+          }
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        return audioCtx;
+      }
+
+      function playSound(type) {
+        try {
+          var ctx = getAudioContext();
+          if (!ctx) return;
+          var now = ctx.currentTime;
+
+          if (type === 'hit') {
+            // 軽快で爽快なネオンヒット音
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(580, now);
+            osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.09);
+          } else if (type === 'bomb') {
+            // 爆発・エラー低音バズ
+            var bOsc = ctx.createOscillator();
+            var bGain = ctx.createGain();
+            bOsc.type = 'sawtooth';
+            bOsc.frequency.setValueAtTime(160, now);
+            bOsc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+            bGain.gain.setValueAtTime(0.4, now);
+            bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            bOsc.connect(bGain);
+            bGain.connect(ctx.destination);
+            bOsc.start(now);
+            bOsc.stop(now + 0.32);
+          } else if (type === 'win') {
+            // 勝利ジングル
+            [523.25, 659.25, 783.99, 1046.5].forEach(function (freq, i) {
+              var wOsc = ctx.createOscillator();
+              var wGain = ctx.createGain();
+              wOsc.type = 'triangle';
+              wOsc.frequency.setValueAtTime(freq, now + i * 0.09);
+              wGain.gain.setValueAtTime(0.25, now + i * 0.09);
+              wGain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.25);
+              wOsc.connect(wGain);
+              wGain.connect(ctx.destination);
+              wOsc.start(now + i * 0.09);
+              wOsc.stop(now + i * 0.09 + 0.26);
+            });
+          }
+        } catch (e) {
+          // 音声再生エラーはゲーム進行を妨げない
+        }
+      }
+
+      // --- ゲーム設定・ステート ---
+      var TARGET_SIZE = 68;
+      var BOMB_SIZE = 64;
+      var DEFAULT_GOAL = 10;
+      var TEAM_GOAL = 15;
+
+      var localPlayerId = 'p1';
+      var playersList = [];
+      var scores = {};
+      var isTeamBattle = false;
+      var isGameOver = false;
+      var isStunned = false;
+      var goalScore = DEFAULT_GOAL;
+      var stunTimer = null;
+
+      var arena = document.getElementById('arena');
+      var targetBtn = document.getElementById('targetBtn');
+      var bombBtn = document.getElementById('bombBtn');
+      var stunBanner = document.getElementById('stunBanner');
+      var gameoverOverlay = document.getElementById('gameoverOverlay');
+      var winnerTitle = document.getElementById('winnerTitle');
+      var winnerSubtitle = document.getElementById('winnerSubtitle');
+      var playerBarsContainer = document.getElementById('playerBars');
+      var goalBadge = document.getElementById('goalBadge');
+      var gameModeLabel = document.getElementById('gameModeLabel');
+      var myStatusLabel = document.getElementById('myStatusLabel');
+
+      // --- プレイヤー・HUD初期化 ---
+      function setupPlayers(playersConfig) {
+        // フォールバック (スタンドアロン起動時)
+        if (!playersConfig || !playersConfig.length) {
+          playersConfig = [
+            { id: 'p1', name: 'Player 1 (Host)', color: '#00f0ff' },
+            { id: 'p2', name: 'Player 2', color: '#ff007f' }
+          ];
+        }
+
+        playersList = playersConfig;
+        scores = {};
+
+        // チーム戦判定: いずれかのプレイヤーに teamId が存在するか
+        isTeamBattle = playersList.some(function (p) { return !!p.teamId; });
+        goalScore = isTeamBattle ? TEAM_GOAL : DEFAULT_GOAL;
+        goalBadge.textContent = 'GOAL: ' + goalScore + ' PTS';
+        gameModeLabel.textContent = isTeamBattle ? 'チーム対戦 (2 vs 2 / ' + goalScore + '点先取)' : '個人戦 (最速 ' + goalScore + '点先取)';
+
+        playersList.forEach(function (p) {
+          scores[p.id] = 0;
+        });
+
+        renderPlayerBars();
+      }
+
+      function renderPlayerBars() {
+        playerBarsContainer.innerHTML = '';
+
+        if (isTeamBattle) {
+          // チーム戦表示: Team 1 (A) vs Team 2 (B)
+          var teams = {};
+          playersList.forEach(function (p) {
+            var rawTId = p.teamId || 'team_a';
+            var tId = (rawTId === 'teamA' || rawTId === 'team_a') ? 'team_a' : 'team_b';
+            if (!teams[tId]) {
+              teams[tId] = {
+                id: tId,
+                name: tId === 'team_a' ? 'チーム・シアン' : 'チーム・マゼンタ',
+                color: tId === 'team_a' ? '#00f0ff' : '#ff007f',
+                score: 0,
+                members: []
+              };
+            }
+            teams[tId].members.push(p.name);
+            teams[tId].score += (scores[p.id] || 0);
+          });
+
+          Object.keys(teams).forEach(function (tId) {
+            var team = teams[tId];
+            var pct = Math.min(100, Math.max(0, (team.score / goalScore) * 100));
+
+            var row = document.createElement('div');
+            row.className = 'player-bar-row';
+            row.innerHTML =
+              '<div class="player-name" style="color: ' + team.color + '">' + team.name + '</div>' +
+              '<div class="progress-track">' +
+                '<div class="progress-fill" style="width: ' + pct + '%; background-color: ' + team.color + '; color: ' + team.color + '"></div>' +
+              '</div>' +
+              '<div class="player-score" style="color: ' + team.color + '">' + team.score + '</div>';
+            playerBarsContainer.appendChild(row);
+          });
+        } else {
+          // 個人戦表示: 全プレイヤー行
+          var defaultColors = ['#00f0ff', '#ff007f', '#ffe600', '#39ff14'];
+          playersList.forEach(function (p, index) {
+            var color = p.color || defaultColors[index % defaultColors.length];
+            var curScore = scores[p.id] || 0;
+            var pct = Math.min(100, Math.max(0, (curScore / goalScore) * 100));
+            var isMe = p.id === localPlayerId;
+
+            var row = document.createElement('div');
+            row.className = 'player-bar-row';
+            row.innerHTML =
+              '<div class="player-name" style="color: ' + color + '">' + (isMe ? '★ ' : '') + p.name + '</div>' +
+              '<div class="progress-track">' +
+                '<div class="progress-fill" style="width: ' + pct + '%; background-color: ' + color + '; color: ' + color + '"></div>' +
+              '</div>' +
+              '<div class="player-score" style="color: ' + color + '">' + curScore + '</div>';
+            playerBarsContainer.appendChild(row);
+          });
+        }
+      }
+
+      // --- ターゲット・爆弾配置ロジック ---
+      function getRandomCoord(max, size) {
+        var padding = 16;
+        var available = max - size - (padding * 2);
+        if (available <= 0) return padding;
+        return padding + Math.floor(Math.random() * available);
+      }
+
+      function spawnObjects() {
+        if (isGameOver) return;
+
+        var arenaWidth = arena.clientWidth;
+        var arenaHeight = arena.clientHeight;
+
+        // 通常ターゲットの位置
+        var tx = getRandomCoord(arenaWidth, TARGET_SIZE);
+        var ty = getRandomCoord(arenaHeight, TARGET_SIZE);
+        targetBtn.style.left = tx + 'px';
+        targetBtn.style.top = ty + 'px';
+        targetBtn.style.display = 'flex';
+
+        // 30% の確率で爆弾トラップも出現
+        var hasBomb = Math.random() < 0.32;
+        if (hasBomb) {
+          var bx, by, dist;
+          var attempts = 0;
+          // 通常ターゲットと重ならないよう距離を確保
+          do {
+            bx = getRandomCoord(arenaWidth, BOMB_SIZE);
+            by = getRandomCoord(arenaHeight, BOMB_SIZE);
+            var dx = (tx + TARGET_SIZE / 2) - (bx + BOMB_SIZE / 2);
+            var dy = (ty + TARGET_SIZE / 2) - (by + BOMB_SIZE / 2);
+            dist = Math.sqrt(dx * dx + dy * dy);
+            attempts++;
+          } while (dist < 90 && attempts < 10);
+
+          bombBtn.style.left = bx + 'px';
+          bombBtn.style.top = by + 'px';
+          bombBtn.style.display = 'flex';
+        } else {
+          bombBtn.style.display = 'none';
+        }
+      }
+
+      // --- タップイベントハンドラ ---
+      function handleTargetClick(e) {
+        e.preventDefault();
+        if (isGameOver || isStunned || Hitsumabushi.isSpectator()) return;
+
+        playSound('hit');
+        scores[localPlayerId] = (scores[localPlayerId] || 0) + 1;
+        myStatusLabel.textContent = 'HIT! スコア: ' + scores[localPlayerId];
+
+        broadcastScore();
+        if (window.Hitsumabushi) {
+          Hitsumabushi.sendGameData({
+            type: 'TARGET_HIT',
+            playerId: localPlayerId,
+            isBomb: false
+          });
+        }
+        renderPlayerBars();
+        checkGameEnd();
+
+        if (!isGameOver) {
+          spawnObjects();
+        }
+      }
+
+      function handleBombClick(e) {
+        e.preventDefault();
+        if (isGameOver || isStunned || Hitsumabushi.isSpectator()) return;
+
+        playSound('bomb');
+        scores[localPlayerId] = Math.max(0, (scores[localPlayerId] || 0) - 1);
+        myStatusLabel.textContent = 'BOOM! 誤タップ -1点';
+
+        // スタン発動 (0.5秒間操作不能)
+        isStunned = true;
+        arena.classList.add('stunned');
+        stunBanner.style.display = 'block';
+
+        if (stunTimer) clearTimeout(stunTimer);
+        stunTimer = setTimeout(function () {
+          isStunned = false;
+          arena.classList.remove('stunned');
+          stunBanner.style.display = 'none';
+          myStatusLabel.textContent = Hitsumabushi.isSpectator() ? '👀 観戦中' : '復帰！狙い撃て！';
+        }, 500);
+
+        broadcastScore();
+        if (window.Hitsumabushi) {
+          Hitsumabushi.sendGameData({
+            type: 'TARGET_HIT',
+            playerId: localPlayerId,
+            isBomb: true
+          });
+        }
+        renderPlayerBars();
+        spawnObjects();
+      }
+
+      function broadcastScore() {
+        if (window.Hitsumabushi && !Hitsumabushi.isSpectator() && localPlayerId) {
+          Hitsumabushi.sendScoreUpdate(scores);
+          Hitsumabushi.sendGameData({
+            type: 'SCORE_SYNC',
+            playerId: localPlayerId,
+            score: scores[localPlayerId]
+          });
+        }
+      }
+
+      function checkGameEnd() {
+        if (isGameOver) return;
+
+        var winnerId = null;
+        var winnerName = '';
+
+        if (isTeamBattle) {
+          var teamScores = {};
+          playersList.forEach(function (p) {
+            var rawTId = p.teamId || 'team_a';
+            var tId = (rawTId === 'teamA' || rawTId === 'team_a') ? 'team_a' : 'team_b';
+            teamScores[tId] = (teamScores[tId] || 0) + (scores[p.id] || 0);
+            if (teamScores[tId] >= goalScore && !winnerId) {
+              winnerId = tId;
+              winnerName = tId === 'team_a' ? 'チーム・シアン' : 'チーム・マゼンタ';
+            }
+          });
+        } else {
+          playersList.forEach(function (p) {
+            if ((scores[p.id] || 0) >= goalScore && !winnerId) {
+              winnerId = p.id;
+              winnerName = p.name;
+            }
+          });
+        }
+
+        if (winnerId) {
+          endGame(winnerId, winnerName);
+        }
+      }
+
+      function endGame(winnerId, winnerName) {
+        isGameOver = true;
+        playSound('win');
+
+        targetBtn.style.display = 'none';
+        bombBtn.style.display = 'none';
+        stunBanner.style.display = 'none';
+
+        var isSpectator = Hitsumabushi.isSpectator();
+        var isMeWinner = !isSpectator && ((winnerId === localPlayerId) || 
+          (isTeamBattle && playersList.find(function(p){ return p.id === localPlayerId; })?.teamId === winnerId));
+
+        winnerTitle.textContent = isSpectator ? 'MATCH FINISHED' : (isMeWinner ? 'VICTORY! 🎉' : 'DEFEAT...');
+        winnerSubtitle.textContent = winnerName + ' の勝利！';
+        gameoverOverlay.style.display = 'flex';
+
+        if (window.Hitsumabushi && !isSpectator) {
+          Hitsumabushi.sendGameOver({
+            winnerPlayerId: winnerId,
+            scores: scores,
+            isTie: false
+          });
+        }
+      }
+
+      // --- リセット（初回起動 & リマッチ用） ---
+      function resetGame(config) {
+        isGameOver = false;
+        isStunned = false;
+        if (stunTimer) clearTimeout(stunTimer);
+
+        arena.classList.remove('stunned');
+        stunBanner.style.display = 'none';
+        gameoverOverlay.style.display = 'none';
+
+        var isSpectator = Hitsumabushi.isSpectator();
+        if (arena) {
+          arena.style.pointerEvents = isSpectator ? 'none' : 'auto';
+        }
+
+        if (config) {
+          localPlayerId = config.localPlayerId || null;
+          setupPlayers(config.players);
+          if (config.isObsMode) {
+            document.body.classList.add('transparent');
+          }
+        } else {
+          setupPlayers([]);
+        }
+
+        myStatusLabel.textContent = isSpectator ? '👀 観戦中 (タップ不可)' : 'ターゲットをタップせよ！';
+        spawnObjects();
+      }
+
+      // イベントリスナー登録
+      targetBtn.addEventListener('click', handleTargetClick);
+      bombBtn.addEventListener('click', handleBombClick);
+
+      // --- Hitsumabushi SDK 初期化 ---
+      if (window.Hitsumabushi) {
+        Hitsumabushi.init({
+          onStartMatch: function (config) {
+            resetGame(config);
+          },
+          onObsModeChange: function (isObsMode) {
+            document.body.classList.toggle('transparent', !!isObsMode);
+          },
+          onGameData: function (payload) {
+            if (!payload) return;
+            if (payload.type === 'SCORE_SYNC' && payload.playerId) {
+              scores[payload.playerId] = payload.score;
+              renderPlayerBars();
+              checkGameEnd();
+            } else if (payload.type === 'TARGET_HIT') {
+              if (Hitsumabushi.isSpectator()) {
+                playSound(payload.isBomb ? 'bomb' : 'hit');
+                var p = playersList.find(function (item) { return item.id === payload.playerId; });
+                var pName = (p && p.name) || payload.playerId;
+                myStatusLabel.textContent = payload.isBomb ? ('💥 ' + pName + ' が爆弾を踏んだ！') : ('🎯 ' + pName + ' がヒット！');
+                spawnObjects();
+              }
+            }
+          }
+        });
+      } else {
+        // スタンドアロン実行時の自動起動
+        resetGame(null);
+      }
+
+      // ウィンドウサイズ変更時にターゲット位置を調整
+      window.addEventListener('resize', function () {
+        if (!isGameOver) {
+          spawnObjects();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
