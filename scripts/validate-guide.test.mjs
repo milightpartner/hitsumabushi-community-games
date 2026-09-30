@@ -76,6 +76,20 @@ describe('validateGuide', () => {
       expect(errors.some((e) => e.includes('author は指定できません') && e.includes('creatorGithub'))).toBe(true);
     });
 
+    it('accepts tags within the limits', () => {
+      const frontmatter = 'gameId: my-game\ntitle: 遊び方\ndescription: 説明です。\ntags: ["攻略", "2人対戦"]';
+      expect(run(guide({ frontmatter }))).toEqual([]);
+    });
+
+    it('rejects malformed, too many and overlong tags', () => {
+      const base = 'gameId: my-game\ntitle: 遊び方\ndescription: 説明です。\n';
+      expect(run(guide({ frontmatter: `${base}tags: 攻略` })).some((e) => e.includes('文字列のリスト'))).toBe(true);
+      const many = JSON.stringify(Array.from({ length: GUIDE_LIMITS.maxTags + 1 }, (_, i) => `t${i}`));
+      expect(run(guide({ frontmatter: `${base}tags: ${many}` })).some((e) => e.includes('個までです'))).toBe(true);
+      const long = 'あ'.repeat(GUIDE_LIMITS.maxTagLength + 1);
+      expect(run(guide({ frontmatter: `${base}tags: ["${long}"]` })).some((e) => e.includes('が長すぎます'))).toBe(true);
+    });
+
     it('rejects unknown keys', () => {
       const frontmatter = 'gameId: my-game\ntitle: 遊び方\ndescription: 説明です。\nfoo: bar';
       expect(run(guide({ frontmatter })).some((e) => e.includes('未対応の項目 foo'))).toBe(true);

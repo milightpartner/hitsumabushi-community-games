@@ -16,9 +16,11 @@ export const GUIDE_LIMITS = {
   maxTitleLength: 60,
   // Used as the page's <meta name="description">, which search engines truncate around here.
   maxDescriptionLength: 120,
+  maxTags: 10,
+  maxTagLength: 20,
 };
 
-const ALLOWED_KEYS = ['gameId', 'title', 'description', 'quickRules'];
+const ALLOWED_KEYS = ['gameId', 'title', 'description', 'quickRules', 'tags'];
 
 // Keys an existing article pipeline understands but a creator must not set themselves - e.g.
 // `slug` could collide with (hijack) another article's URL, `author` could impersonate someone.
@@ -83,6 +85,21 @@ export function validateGuide({ gameId, text, readFileSize }) {
   }
   checkRequiredText(errors, file, data, 'title', GUIDE_LIMITS.maxTitleLength);
   checkRequiredText(errors, file, data, 'description', GUIDE_LIMITS.maxDescriptionLength);
+
+  // --- tags (shown as #tag chips on the page) ---
+  if (data.tags !== undefined) {
+    const { maxTags, maxTagLength } = GUIDE_LIMITS;
+    if (!Array.isArray(data.tags) || data.tags.some((t) => typeof t !== 'string' || !t.trim())) {
+      errors.push(`${file} の tags は文字列のリストで指定してください(例: tags: ["攻略", "2人対戦"])。`);
+    } else {
+      if (data.tags.length > maxTags) {
+        errors.push(`${file} の tags は${maxTags}個までです(${data.tags.length}個あります)。`);
+      }
+      for (const tag of data.tags.filter((t) => [...t.trim()].length > maxTagLength)) {
+        errors.push(`${file} のタグ "${truncate(tag)}" が長すぎます。1つ${maxTagLength}文字以内にしてください。`);
+      }
+    }
+  }
 
   // --- quickRules (the in-game rules panel) ---
   if (data.quickRules !== undefined) {

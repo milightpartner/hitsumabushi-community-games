@@ -32,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # build:articles reads guide publish dates from git history
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -59,6 +61,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # build:articles reads guide publish dates from git history
       # firebase.json's guide site needs its public dir to exist for any deploy.
       - uses: actions/setup-node@v4
         with:
@@ -77,6 +81,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # build:articles reads guide publish dates from git history
       - uses: actions/setup-node@v4
         with:
           node-version: 20
