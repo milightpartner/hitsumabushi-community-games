@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ネオン・ダイノ・トラップ (Neon Dino Trap)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      background-color: #0a0b10;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      transition: background-color 0.3s;
+    }
+
+    body.transparent {
+      background-color: transparent !important;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 100%;
+      max-width: 800px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    /* 上部ヘッダーHUD */
+    .hud-bar {
+      width: 100%;
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(22, 26, 42, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 10px;
+      padding: 4px 14px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+      min-height: 38px;
+    }
+
+    .hud-role {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-role {
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .badge-runner {
+      background: rgba(0, 240, 255, 0.2);
+      border: 1px solid #00f0ff;
+      color: #00f0ff;
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+    }
+
+    .badge-trapper {
+      background: rgba(255, 0, 127, 0.2);
+      border: 1px solid #ff007f;
+      color: #ff007f;
+      box-shadow: 0 0 8px rgba(255, 0, 127, 0.4);
+    }
+
+    .hud-timer {
+      font-size: 1.35rem;
+      color: #ffe600;
+      text-shadow: 0 0 10px rgba(255, 230, 0, 0.5);
+      font-family: monospace;
+      letter-spacing: 2px;
+    }
+
+    .hud-stats {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .heart-icon {
+      color: #ff007f;
+      text-shadow: 0 0 8px #ff007f;
+      font-size: 1.05rem;
+      margin-right: 1px;
+    }
+
+    /* ゲームキャンバス（中央フレキシブル拡大・見切れ防止） */
+    .canvas-wrapper {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      position: relative;
+      background: rgba(10, 11, 16, 0.95);
+      border: 2px solid rgba(0, 240, 255, 0.4);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.2);
+    }
+
+    body.transparent .canvas-wrapper {
+      background: transparent !important;
+      border-color: rgba(0, 240, 255, 0.6);
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* オーバーレイ（カウントダウン・交代・リザルト） */
+    .overlay-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      background: rgba(10, 11, 16, 0.8);
+      backdrop-filter: blur(6px);
+      transition: opacity 0.3s;
+      z-index: 10;
+    }
+
+    .overlay-layer.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .overlay-title {
+      font-size: 2rem;
+      font-weight: 900;
+      text-align: center;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .overlay-sub {
+      font-size: 1rem;
+      color: #94a3b8;
+      text-align: center;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .btn-action {
+      pointer-events: auto;
+      background: rgba(0, 240, 255, 0.15);
+      border: 2px solid #00f0ff;
+      color: #00f0ff;
+      padding: 10px 24px;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+      transition: all 0.2s;
+    }
+
+    .btn-action:hover {
+      background: #00f0ff;
+      color: #0a0b10;
+      box-shadow: 0 0 25px #00f0ff;
+      transform: translateY(-2px);
+    }
+
+    /* 操作コントロールエリア（下部・画面内に完全収容） */
+    .control-panel {
+      width: 100%;
+      flex-shrink: 0;
+      background: rgba(22, 26, 42, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      border-radius: 10px;
+      padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.1);
+    }
+
+    /* ランナー用コントロール (JUMP / DUCK) */
+    .runner-controls {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      height: 60px;
+    }
+
+    .btn-runner {
+      flex: 1;
+      border-radius: 8px;
+      border: 2px solid;
+      background: rgba(0, 0, 0, 0.4);
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: all 0.1s;
+      touch-action: manipulation;
+    }
+
+    .btn-jump {
+      border-color: #00f0ff;
+      color: #00f0ff;
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+    }
+
+    .btn-jump:active, .btn-jump.active {
+      background: #00f0ff;
+      color: #0a0b10;
+      transform: scale(0.97);
+    }
+
+    .btn-duck {
+      border-color: #39ff14;
+      color: #39ff14;
+      box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
+    }
+
+    .btn-duck:active, .btn-duck.active {
+      background: #39ff14;
+      color: #0a0b10;
+      transform: scale(0.97);
+    }
+
+    .control-hint {
+      text-align: center;
+      font-size: 0.72rem;
+      color: #64748b;
+    }
+
+    /* トラッパー用コントロール (4ボタン) */
+    .trapper-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+    }
+
+    .cooldown-bar-container {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .cooldown-bar {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #ff007f, #ffe600);
+      transition: width 0.05s linear;
+    }
+
+    .trapper-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .btn-trap {
+      position: relative;
+      background: rgba(255, 0, 127, 0.12);
+      border: 1px solid rgba(255, 0, 127, 0.45);
+      border-radius: 8px;
+      padding: 4px 2px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #fff;
+      transition: all 0.15s;
+      min-height: 52px;
+    }
+
+    .btn-trap:hover:not(:disabled) {
+      background: rgba(255, 0, 127, 0.3);
+      border-color: #ff007f;
+      box-shadow: 0 0 12px rgba(255, 0, 127, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .btn-trap:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+
+    .btn-trap:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-trap.special {
+      background: rgba(255, 230, 0, 0.12);
+      border-color: rgba(255, 230, 0, 0.5);
+    }
+
+    .btn-trap.special:hover:not(:disabled) {
+      background: rgba(255, 230, 0, 0.3);
+      border-color: #ffe600;
+      box-shadow: 0 0 12px rgba(255, 230, 0, 0.6);
+    }
+
+    .trap-icon {
+      font-size: 1.15rem;
+      margin-bottom: 1px;
+    }
+
+    .trap-name {
+      font-size: 0.7rem;
+      font-weight: bold;
+      color: #cbd5e1;
+      text-align: center;
+    }
+
+    .trap-key {
+      font-size: 0.65rem;
+      color: #00f0ff;
+      opacity: 0.85;
+    }
+
+    .trap-badge {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      background: #ff007f;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: bold;
+      padding: 1px 5px;
+      border-radius: 8px;
+      box-shadow: 0 0 6px #ff007f;
+    }
+
+    .btn-trap.special .trap-badge {
+      background: #ffe600;
+      color: #0a0b10;
+      box-shadow: 0 0 6px #ffe600;
+    }
+
+    /* 警告アラートネオン */
+    .alert-banner {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(255, 0, 127, 0.35);
+      border: 1px solid #ff007f;
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      opacity: 0;
+      transform: translateX(20px);
+      transition: all 0.2s ease-out;
+      pointer-events: none;
+      box-shadow: 0 0 12px rgba(255, 0, 127, 0.6);
+      z-index: 5;
+    }
+
+    .alert-banner.show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    @media (max-width: 600px) {
+      .hud-bar {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+      }
+      .hud-timer {
+        font-size: 1.1rem;
+      }
+      .trapper-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .btn-trap {
+        min-height: 44px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="gameContainer">
+    <!-- 上部HUD -->
+    <div class="hud-bar">
+      <div class="hud-role">
+        <span id="roleBadge" class="badge-role badge-runner">🦖 恐竜 (RUNNER)</span>
+        <span id="playerLabel" style="color: #94a3b8; font-size: 0.8rem;">P1</span>
+      </div>
+
+      <div class="hud-timer" id="timerDisplay">30.0s</div>
+
+      <div class="hud-stats">
+        <div id="runnerHudStats" style="display: flex; align-items: center; gap: 8px;">
+          <div id="heartsContainer">
+            <span class="heart-icon">❤️</span><span class="heart-icon">❤️</span><span class="heart-icon">❤️</span>
+          </div>
+          <span style="color: #00f0ff; font-size: 0.85rem;" id="scoreDisplay">DODGE: 0</span>
+        </div>
+        <div id="trapperHudStats" style="display: none; align-items: center; gap: 6px; font-size: 0.85rem; color: #ff007f;">
+          <span>🎯 TRAPPER VIEW</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ゲーム画面 Canvas (ビューポート内に100%収まる) -->
+    <div class="canvas-wrapper">
+      <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+      <!-- 警告アラート -->
+      <div class="alert-banner" id="alertBanner">
+        <span>⚠️</span> <span id="alertText">TRAP INCOMING!</span>
+      </div>
+
+      <!-- オーバーレイ表示（待機、カウントダウン、交代、リザルト） -->
+      <div class="overlay-layer" id="overlay">
+        <div class="overlay-title" id="overlayTitle" style="color: #00f0ff;">NEON DINO TRAP</div>
+        <div class="overlay-sub" id="overlaySub">恐竜 vs 罠師！30秒×2ラウンドの攻守交代バトル！</div>
+        <div style="display: flex; gap: 10px;" id="overlayButtons">
+          <button class="btn-action" id="btnStartPvp" style="display: none;">対戦開始</button>
+          <button class="btn-action" id="btnPracticeCpu">VS CPU で遊ぶ</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下部操作コントロールパネル（絶対に見切れない） -->
+    <div class="control-panel">
+      <!-- ランナー用操作 -->
+      <div id="runnerControls" class="runner-controls">
+        <button class="btn-runner btn-jump" id="btnJump">
+          <span>🔼 JUMP (跳ぶ)</span>
+          <span style="font-size: 0.72rem; opacity: 0.8;">[Space / ↑]</span>
+        </button>
+        <button class="btn-runner btn-duck" id="btnDuck">
+          <span>🔽 DUCK (しゃがむ)</span>
+          <span style="font-size: 0.72rem; opacity: 0.8;">[↓ / S]</span>
+        </button>
+      </div>
+
+      <!-- トラッパー用操作 -->
+      <div id="trapperControls" class="trapper-controls" style="display: none;">
+        <div class="cooldown-bar-container">
+          <div class="cooldown-bar" id="cooldownBar"></div>
+        </div>
+        <div class="trapper-grid">
+          <!-- 通常サボテン [キー: 1] -->
+          <button class="btn-trap" id="btnTrapCactus" onclick="triggerTrap('cactus')">
+            <span class="trap-badge" id="badgeCactus">10</span>
+            <div class="trap-icon">🌵</div>
+            <div class="trap-name">地上サボテン</div>
+            <div class="trap-key">[1] ジャンプ回避</div>
+          </button>
+
+          <!-- 通常コウモリ [キー: 2] -->
+          <button class="btn-trap" id="btnTrapBat" onclick="triggerTrap('bat')">
+            <span class="trap-badge" id="badgeBat">10</span>
+            <div class="trap-icon">🦇</div>
+            <div class="trap-name">中空コウモリ</div>
+            <div class="trap-key">[2] しゃがみ回避</div>
+          </button>
+
+          <!-- ジャンプサボテン (必殺技) [キー: 3] -->
+          <button class="btn-trap special" id="btnTrapJumpCactus" onclick="triggerTrap('jump_cactus')">
+            <span class="trap-badge" id="badgeJumpCactus">1</span>
+            <div class="trap-icon">🚀🌵</div>
+            <div class="trap-name">飛ぶサボテン</div>
+            <div class="trap-key">[3] しゃがみ必須!</div>
+          </button>
+
+          <!-- 低空コウモリ (必殺技) [キー: 4] -->
+          <button class="btn-trap special" id="btnTrapLowBat" onclick="triggerTrap('low_bat')">
+            <span class="trap-badge" id="badgeLowBat">1</span>
+            <div class="trap-icon">🦅⚡</div>
+            <div class="trap-name">低空コウモリ</div>
+            <div class="trap-key">[4] ジャンプ必須!</div>
+          </button>
+        </div>
+      </div>
+
+      <div class="control-hint" id="controlHint">
+        PC: [Space/↑] ジャンプ | [↓] しゃがむ ／ スマホ: ボタンをタップ
+      </div>
+    </div>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script>
+  <script>
+    /* ==========================================================================
+       ゲーム定数＆初期設定
+       ========================================================================== */
+    var CANVAS_WIDTH = 800;
+    var CANVAS_HEIGHT = 400;
+    var GROUND_Y = 320;
+    var ROUND_DURATION = 30.0; // 30秒
+    var MIN_TRAP_INTERVAL = 1200; // 最短1.2秒クールダウン
+
+    var canvas = document.getElementById('gameCanvas');
+    var ctx = canvas.getContext('2d');
+
+    // DOM要素
+    var roleBadge = document.getElementById('roleBadge');
+    var playerLabel = document.getElementById('playerLabel');
+    var timerDisplay = document.getElementById('timerDisplay');
+    var runnerHudStats = document.getElementById('runnerHudStats');
+    var trapperHudStats = document.getElementById('trapperHudStats');
+    var heartsContainer = document.getElementById('heartsContainer');
+    var scoreDisplay = document.getElementById('scoreDisplay');
+    var overlay = document.getElementById('overlay');
+    var overlayTitle = document.getElementById('overlayTitle');
+    var overlaySub = document.getElementById('overlaySub');
+    var overlayButtons = document.getElementById('overlayButtons');
+    var btnStartPvp = document.getElementById('btnStartPvp');
+    var btnPracticeCpu = document.getElementById('btnPracticeCpu');
+    var runnerControls = document.getElementById('runnerControls');
+    var trapperControls = document.getElementById('trapperControls');
+    var cooldownBar = document.getElementById('cooldownBar');
+    var alertBanner = document.getElementById('alertBanner');
+    var alertText = document.getElementById('alertText');
+    var controlHint = document.getElementById('controlHint');
+
+    var btnJump = document.getElementById('btnJump');
+    var btnDuck = document.getElementById('btnDuck');
+
+    var badgeCactus = document.getElementById('badgeCactus');
+    var badgeBat = document.getElementById('badgeBat');
+    var badgeJumpCactus = document.getElementById('badgeJumpCactus');
+    var badgeLowBat = document.getElementById('badgeLowBat');
+
+    /* ==========================================================================
+       対戦ステート＆プレイヤー管理
+       ========================================================================== */
+    var localPlayerId = null;
+    var isSpectator = false;
+    var isGameMaster = false;
+    var isPvpMode = false;
+    var isCpuOpponent = true; // デフォルトはCPU対戦対応
+    var isGameOver = false;
+
+    // ラウンド進行: 'LOBBY' | 'ROUND_1' | 'SWITCH' | 'ROUND_2' | 'RESULT'
+    var currentPhase = 'LOBBY';
+    var roundTimeLeft = ROUND_DURATION;
+    var roundTimerInterval = null;
+
+    // ラウンド別役割:
+    // Round 1: P1=RUNNER, P2=TRAPPER
+    // Round 2: P2=RUNNER, P1=TRAPPER
+    var currentRound = 1;
+    var localRole = 'RUNNER'; // 'RUNNER' or 'TRAPPER' or 'SPECTATOR'
+
+    // スコア＆リザルト記録
+    var scores = {
+      p1: { time: 0, hp: 3, dodged: 0, totalScore: 0 },
+      p2: { time: 0, hp: 3, dodged: 0, totalScore: 0 }
+    };
+
+    // トラッパー所持残弾（各ラウンド開始時に補充）
+    var trapperInventory = {
+      cactus: 10,
+      bat: 10,
+      jump_cactus: 1,
+      low_bat: 1
+    };
+
+    var lastTrapSpawnTime = 0;
+
+    /* ==========================================================================
+       恐竜（ランナー）オブジェクト
+       ========================================================================== */
+    var dino = {
+      x: 80,
+      y: GROUND_Y - 54,
+      width: 44,
+      height: 54,
+      vy: 0,
+      gravity: 2100, // px / s^2 (キビキビした重力)
+      jumpStrength: -580, // 最高到達点約80px (引きつけて跳ばないと当たるシビアな高さ)
+      isGrounded: true,
+      isDucking: false,
+      hp: 3,
+      invincibleTime: 0,
+      animFrame: 0,
+      animTimer: 0
+    };
+
+    // 障害物配列
+    var obstacles = [];
+    var nextObstacleId = 1;
+
+    // パーティクル配列
+    var particles = [];
+
+    // 背景スクロールオフセット
+    var bgOffset = 0;
+    var SCROLL_SPEED = 340; // px / s
+
+    /* ==========================================================================
+       Hitsumabushi SDK 初期化 & ポータル自動連携
+       ========================================================================== */
+    Hitsumabushi.init({
+      onStartMatch: function (config) {
+        isSpectator = Hitsumabushi.isSpectator();
+        localPlayerId = isSpectator ? null : (config.localPlayerId || 'p1');
+        isGameMaster = Hitsumabushi.isGameMaster();
+        var players = config.players || [];
+
+        // 対戦相手が人間かどうか判定
+        var hasHumanOpponent = false;
+        if (isSpectator) {
+          hasHumanOpponent = players.length >= 2;
+        } else {
+          var opponent = players.find(function (p) { return p.id !== localPlayerId; });
+          hasHumanOpponent = opponent && !opponent.isCpu;
+        }
+
+        isPvpMode = hasHumanOpponent;
+        isCpuOpponent = !hasHumanOpponent;
+
+        if (config.isObsMode) {
+          document.body.classList.add('transparent');
+        }
+
+        var firstHumanPlayer = (players || []).find(function (p) { return !p.isCpu; });
+        var isEffectiveMaster = !isSpectator && firstHumanPlayer && localPlayerId === firstHumanPlayer.id;
+
+        resetFullGame();
+
+        // ポータルからゲーム画面が開始された場合、着席の親（第1人間プレイヤー）なら自動でカウントダウン開始！
+        if (isEffectiveMaster) {
+          overlayButtons.style.display = 'none';
+          startAutoCountdown();
+        } else {
+          overlayButtons.style.display = 'none';
+          overlayTitle.textContent = isSpectator ? '👀 観戦モード' : 'NEON DINO TRAP';
+          overlaySub.textContent = isSpectator ? '対戦プレイヤーの開始合図を待っています...' : 'ホストの開始合図を待っています...';
+        }
+      },
+      onObsModeChange: function (isObs) {
+        document.body.classList.toggle('transparent', isObs);
+      },
+      onGameData: function (payload, senderId) {
+        handleRemoteData(payload);
+      }
+    });
+
+    // カウントダウン演出を経て自動スタート
+    function startAutoCountdown() {
+      var count = 3;
+      overlay.classList.remove('hidden');
+      overlayTitle.textContent = 'ROUND 1';
+      overlayTitle.style.color = '#00f0ff';
+      overlaySub.innerHTML = '第1ラウンド開始まで... <span style="font-size:2rem; font-weight:900; color:#ffe600;">' + count + '</span>';
+
+      Hitsumabushi.sendGameData({ type: 'COUNTDOWN_TICK', count: count });
+
+      var cdInterval = setInterval(function () {
+        count--;
+        if (count > 0) {
+          overlaySub.innerHTML = '第1ラウンド開始まで... <span style="font-size:2rem; font-weight:900; color:#ffe600;">' + count + '</span>';
+          Hitsumabushi.sendGameData({ type: 'COUNTDOWN_TICK', count: count });
+        } else {
+          clearInterval(cdInterval);
+          Hitsumabushi.sendGameData({ type: 'START_MATCH' });
+          startRound(1);
+        }
+      }, 1000);
+    }
+
+    /* ==========================================================================
+       完全リセット（リマッチ・初期化）
+       ========================================================================== */
+    function resetFullGame() {
+      if (roundTimerInterval) clearInterval(roundTimerInterval);
+      isGameOver = false;
+      currentPhase = 'LOBBY';
+      currentRound = 1;
+      roundTimeLeft = ROUND_DURATION;
+      obstacles = [];
+      particles = [];
+      cpuTrapperTimer = 0;
+      scores = {
+        p1: { time: 0, hp: 3, dodged: 0, totalScore: 0 },
+        p2: { time: 0, hp: 3, dodged: 0, totalScore: 0 }
+      };
+      resetDino();
+      resetTrapperInventory();
+      updateHUD();
+      overlay.classList.remove('hidden');
+      overlayTitle.textContent = 'NEON DINO TRAP';
+      overlayTitle.style.color = '#00f0ff';
+    }
+
+    function resetDino() {
+      dino.y = GROUND_Y - 54;
+      dino.vy = 0;
+      dino.isGrounded = true;
+      dino.isDucking = false;
+      dino.hp = 3;
+      dino.invincibleTime = 0;
+    }
+
+    function resetTrapperInventory() {
+      trapperInventory = {
+        cactus: 10,
+        bat: 10,
+        jump_cactus: 1,
+        low_bat: 1
+      };
+      lastTrapSpawnTime = 0;
+      updateTrapperButtons();
+    }
+
+    /* ==========================================================================
+       ラウンド進行フロー
+       ========================================================================== */
+    btnStartPvp.addEventListener('click', function () {
+      if (!Hitsumabushi.isGameMaster()) return;
+      isCpuOpponent = false;
+      startAutoCountdown();
+    });
+
+    btnPracticeCpu.addEventListener('click', function () {
+      isCpuOpponent = true;
+      startRound(1);
+    });
+
+    function startRound(roundNumber) {
+      currentRound = roundNumber;
+      currentPhase = (roundNumber === 1) ? 'ROUND_1' : 'ROUND_2';
+      roundTimeLeft = ROUND_DURATION;
+      obstacles = [];
+      cpuTrapperTimer = 0;
+      cpuNextSpawnInterval = 1.4;
+      resetDino();
+      resetTrapperInventory();
+
+      // 役割決定:
+      // Round 1: p1 = RUNNER, p2 (or CPU) = TRAPPER
+      // Round 2: p2 (or CPU) = RUNNER, p1 = TRAPPER
+      if (isSpectator) {
+        localRole = 'SPECTATOR';
+      } else if (roundNumber === 1) {
+        localRole = (localPlayerId === 'p1') ? 'RUNNER' : 'TRAPPER';
+      } else {
+        localRole = (localPlayerId === 'p1') ? 'TRAPPER' : 'RUNNER';
+      }
+
+      overlay.classList.add('hidden');
+      updateHUD();
+
+      // ラウンドタイマー開始
+      if (roundTimerInterval) clearInterval(roundTimerInterval);
+      var lastTick = performance.now();
+
+      roundTimerInterval = setInterval(function () {
+        var now = performance.now();
+        var delta = (now - lastTick) / 1000;
+        lastTick = now;
+
+        if (currentPhase === 'ROUND_1' || currentPhase === 'ROUND_2') {
+          roundTimeLeft -= delta;
+          if (roundTimeLeft <= 0) {
+            roundTimeLeft = 0;
+            if (!isSpectator) {
+              finishRound(true); // 30秒完走！
+            }
+          }
+          timerDisplay.textContent = roundTimeLeft.toFixed(1) + 's';
+
+          // CPUトラッパー自動召喚（自分がランナー、かつ相手がCPUの時）
+          if (isCpuOpponent && localRole === 'RUNNER') {
+            updateCpuTrapper(delta);
+          }
+          // CPUランナー自動回避（自分がトラッパー、かつ相手がCPUの時）
+          if (isCpuOpponent && localRole === 'TRAPPER') {
+            updateCpuRunner(delta);
+          }
+        }
+      }, 50);
+    }
+
+    function finishRound(isCompleted) {
+      clearInterval(roundTimerInterval);
+      var currentRunner = (currentRound === 1) ? 'p1' : 'p2';
+      var survivalTime = ROUND_DURATION - roundTimeLeft;
+      var dodgedCount = (currentRound === 1 ? scores.p1.dodged : scores.p2.dodged);
+      var hpRemaining = dino.hp;
+
+      // スコア計算: 生存秒数*100 + 残HP*200 + 回避数*50 (完走ボーナス+500)
+      var roundScore = Math.floor(survivalTime * 100) + (hpRemaining * 200) + (dodgedCount * 50) + (isCompleted ? 500 : 0);
+
+      scores[currentRunner].time = survivalTime;
+      scores[currentRunner].hp = hpRemaining;
+      scores[currentRunner].totalScore = roundScore;
+
+      if (!isSpectator) {
+        Hitsumabushi.sendScoreUpdate({
+          p1: scores.p1.totalScore,
+          p2: scores.p2.totalScore
+        }, currentRound);
+      }
+
+      if (currentRound === 1) {
+        // Round 1 終了 ➔ 攻守交代 (SWITCH)
+        currentPhase = 'SWITCH';
+        overlay.classList.remove('hidden');
+        overlayTitle.textContent = '攻守交代！ ROLE REVERSAL';
+        overlayTitle.style.color = '#ffe600';
+        var roleSwitchNotice = isSpectator 
+          ? '第1ラウンド終了！プレイヤーが攻守を交代します！' 
+          : (localRole === 'RUNNER' ? 'あなたは【罠師 (TRAPPER)】へ！' : 'あなたは【恐竜 (RUNNER)】へ！');
+        overlaySub.innerHTML = '第1ラウンド終了！<br>' + roleSwitchNotice + '<br><span style="color:#ffe600; font-size:1.4rem; font-weight:bold;">3秒後に第2ラウンド開始！</span>';
+        overlayButtons.style.display = 'none';
+
+        var countdown = 3;
+        var switchInterval = setInterval(function () {
+          countdown--;
+          if (countdown <= 0) {
+            clearInterval(switchInterval);
+            startRound(2);
+          }
+        }, 1000);
+      } else {
+        // Round 2 終了 ➔ 結果発表
+        currentPhase = 'RESULT';
+        showFinalResult();
+      }
+    }
+
+    /* ==========================================================================
+       最終結果発表 & 勝敗送信
+       ========================================================================== */
+    function showFinalResult() {
+      isGameOver = true;
+      overlay.classList.remove('hidden');
+
+      var p1Score = scores.p1.totalScore;
+      var p2Score = scores.p2.totalScore;
+
+      var isTie = p1Score === p2Score;
+      var winnerId = null;
+      if (!isTie) {
+        winnerId = p1Score > p2Score ? 'p1' : 'p2';
+      }
+
+      var isLocalWinner = !isSpectator && (winnerId === localPlayerId);
+      overlayTitle.textContent = isTie ? 'DRAW MATCH!' : (isSpectator ? 'MATCH FINISHED' : (isLocalWinner ? 'VICTORY!! 🎉' : 'DEFEAT... 💥'));
+      overlayTitle.style.color = isTie ? '#ffe600' : (isSpectator ? '#ffe600' : (isLocalWinner ? '#00f0ff' : '#ff007f'));
+
+      var p1Name = isSpectator ? 'Player 1' : (isCpuOpponent && localPlayerId === 'p2' ? 'CPU' : (localPlayerId === 'p1' ? 'あなた (P1)' : '相手 (P1)'));
+      var p2Name = isSpectator ? 'Player 2' : (isCpuOpponent && localPlayerId === 'p1' ? 'CPU' : (localPlayerId === 'p2' ? 'あなた (P2)' : '相手 (P2)'));
+
+      overlaySub.innerHTML = 
+        '<div style="background:rgba(0,0,0,0.5); padding:10px; border-radius:10px; margin:8px 0; font-family:monospace; font-size:0.95rem;">' +
+        p1Name + ' スコア: ' + p1Score + ' pt (生存 ' + scores.p1.time.toFixed(1) + 's / HP ' + scores.p1.hp + ')<br>' +
+        p2Name + ' スコア: ' + p2Score + ' pt (生存 ' + scores.p2.time.toFixed(1) + 's / HP ' + scores.p2.hp + ')</div>';
+
+      overlayButtons.style.display = isSpectator ? 'none' : 'flex';
+      btnPracticeCpu.style.display = isSpectator ? 'none' : 'inline-block';
+      btnPracticeCpu.textContent = 'もう一度あそぶ';
+      btnStartPvp.style.display = 'none';
+
+      if (!isSpectator) {
+        Hitsumabushi.sendGameOver({
+          winnerPlayerId: winnerId,
+          rankings: isTie ? ['p1', 'p2'] : (winnerId === 'p1' ? ['p1', 'p2'] : ['p2', 'p1']),
+          isTie: isTie,
+          scores: { p1: p1Score, p2: p2Score }
+        });
+      }
+    }
+
+    /* ==========================================================================
+       HUD & コントロールUI更新
+       ========================================================================== */
+    function updateHUD() {
+      playerLabel.textContent = isSpectator ? 'SPECTATOR' : (localPlayerId ? localPlayerId.toUpperCase() : '');
+      if (isSpectator || localRole === 'SPECTATOR') {
+        roleBadge.className = 'badge-role';
+        roleBadge.textContent = '👀 観戦中 (ROUND ' + currentRound + ')';
+        runnerHudStats.style.display = 'flex';
+        trapperHudStats.style.display = 'none';
+        runnerControls.style.display = 'flex';
+        trapperControls.style.display = 'none';
+        btnJump.disabled = true;
+        btnDuck.disabled = true;
+        btnJump.style.pointerEvents = 'none';
+        btnDuck.style.pointerEvents = 'none';
+        btnJump.style.opacity = '0.6';
+        btnDuck.style.opacity = '0.6';
+        controlHint.textContent = '👀 観戦モード（操作不可）';
+      } else if (localRole === 'RUNNER') {
+        btnJump.disabled = false;
+        btnDuck.disabled = false;
+        btnJump.style.pointerEvents = 'auto';
+        btnDuck.style.pointerEvents = 'auto';
+        btnJump.style.opacity = '1';
+        btnDuck.style.opacity = '1';
+        roleBadge.className = 'badge-role badge-runner';
+        roleBadge.textContent = '🦖 恐竜 (RUNNER)';
+        runnerHudStats.style.display = 'flex';
+        trapperHudStats.style.display = 'none';
+        runnerControls.style.display = 'flex';
+        trapperControls.style.display = 'none';
+        controlHint.textContent = 'PC: [Space/↑] ジャンプ | [↓] しゃがむ ／ スマホ: ボタンをタップ';
+      } else {
+        roleBadge.className = 'badge-role badge-trapper';
+        roleBadge.textContent = '🎯 罠師 (TRAPPER)';
+        runnerHudStats.style.display = 'none';
+        trapperHudStats.style.display = 'flex';
+        runnerControls.style.display = 'none';
+        trapperControls.style.display = 'flex';
+        controlHint.textContent = 'PC: [1][2][3][4] キー または ボタンタップでトラップ射出！ (最短1.2秒CD)';
+      }
+      updateHearts();
+      updateScore();
+      updateTrapperButtons();
+    }
+
+    function updateHearts() {
+      var html = '';
+      for (var i = 0; i < 3; i++) {
+        if (i < dino.hp) {
+          html += '<span class="heart-icon">❤️</span>';
+        } else {
+          html += '<span class="heart-icon" style="opacity:0.2; filter:grayscale(1);">🖤</span>';
+        }
+      }
+      heartsContainer.innerHTML = html;
+    }
+
+    function updateScore() {
+      var dodged = (currentRound === 1 ? scores.p1.dodged : scores.p2.dodged);
+      scoreDisplay.textContent = 'DODGE: ' + dodged;
+    }
+
+    function updateTrapperButtons() {
+      badgeCactus.textContent = trapperInventory.cactus;
+      badgeBat.textContent = trapperInventory.bat;
+      badgeJumpCactus.textContent = trapperInventory.jump_cactus;
+      badgeLowBat.textContent = trapperInventory.low_bat;
+
+      var now = performance.now();
+      var isCoolingDown = (now - lastTrapSpawnTime) < MIN_TRAP_INTERVAL;
+
+      document.getElementById('btnTrapCactus').disabled = isCoolingDown || trapperInventory.cactus <= 0;
+      document.getElementById('btnTrapBat').disabled = isCoolingDown || trapperInventory.bat <= 0;
+      document.getElementById('btnTrapJumpCactus').disabled = isCoolingDown || trapperInventory.jump_cactus <= 0;
+      document.getElementById('btnTrapLowBat').disabled = isCoolingDown || trapperInventory.low_bat <= 0;
+    }
+
+    /* ==========================================================================
+       トラップ召喚ロジック（トラッパー側）
+       ========================================================================== */
+    function triggerTrap(trapType) {
+      if (isSpectator) return;
+      if (currentPhase !== 'ROUND_1' && currentPhase !== 'ROUND_2') return;
+      if (localRole !== 'TRAPPER') return;
+
+      var now = performance.now();
+      if (now - lastTrapSpawnTime < MIN_TRAP_INTERVAL) return;
+      if (trapperInventory[trapType] <= 0) return;
+
+      trapperInventory[trapType]--;
+      lastTrapSpawnTime = now;
+      updateTrapperButtons();
+
+      var trapId = nextObstacleId++;
+      var trapData = {
+        type: 'SPAWN_TRAP',
+        trapType: trapType,
+        trapId: trapId
+      };
+
+      // 相手・観戦者へ送信
+      if (!isSpectator) {
+        Hitsumabushi.sendGameData(trapData);
+      }
+
+      // トラッパーのローカル画面にもトラップを出現させて同期描画
+      spawnObstacle(trapType, trapId);
+    }
+
+    function spawnObstacle(trapType, trapId) {
+      var obs = {
+        id: trapId,
+        type: trapType,
+        x: CANVAS_WIDTH + 20,
+        y: GROUND_Y - 44,
+        width: 30,
+        height: 44,
+        passed: false,
+        hasTriggered: false,
+        targetY: GROUND_Y - 44
+      };
+
+      if (trapType === 'cactus') {
+        obs.y = GROUND_Y - 44;
+        obs.width = 24;
+        obs.height = 44;
+      } else if (trapType === 'bat') {
+        obs.y = GROUND_Y - 80;
+        obs.baseY = GROUND_Y - 80;
+        obs.targetY = GROUND_Y - 80;
+        obs.width = 48;
+        obs.height = 48;
+      } else if (trapType === 'jump_cactus') {
+        // 🚀 飛ぶサボテン：最初は地上サボテンと同じ高さで走ってくる！（直前でホップ）
+        obs.y = GROUND_Y - 44;
+        obs.targetY = GROUND_Y - 44;
+        obs.width = 30;
+        obs.height = 44;
+      } else if (trapType === 'low_bat') {
+        // 🦅 低空コウモリ：最初は中空コウモリと同じ大型で飛んできて、直前で地面スレスレへダイブ！
+        obs.y = GROUND_Y - 92;
+        obs.baseY = GROUND_Y - 92;
+        obs.targetY = GROUND_Y - 92;
+        obs.width = 48;
+        obs.height = 48;
+      }
+
+      obstacles.push(obs);
+
+      // 警告ネオンバナー演出（ネタバレ防止：答えを教えず奇襲の予兆のみ演出）
+      showAlert(trapType);
+    }
+
+    function showAlert(trapType) {
+      if (trapType === 'jump_cactus' || trapType === 'low_bat') {
+        alertText.textContent = '⚡ DANGER! 奇襲トラップ接近！';
+      } else {
+        alertText.textContent = '⚠️ トラップ接近中！';
+      }
+      alertBanner.classList.add('show');
+      setTimeout(function () {
+        alertBanner.classList.remove('show');
+      }, 1200);
+    }
+
+    /* ==========================================================================
+       CPU 対戦ロジック（確実に召喚＆人間らしい回避）
+       ========================================================================== */
+    var cpuTrapperTimer = 0;
+    var cpuNextSpawnInterval = 1.4;
+
+    function updateCpuTrapper(delta) {
+      cpuTrapperTimer += delta;
+
+      if (cpuTrapperTimer >= cpuNextSpawnInterval) {
+        cpuTrapperTimer = 0;
+        cpuNextSpawnInterval = 1.3 + Math.random() * 0.9; // 1.3s〜2.2s
+
+        var availableTraps = [];
+        if (trapperInventory.cactus > 0) availableTraps.push('cactus');
+        if (trapperInventory.bat > 0) availableTraps.push('bat');
+
+        // 残り時間18秒以下で必殺技解禁
+        if (roundTimeLeft <= 18) {
+          if (trapperInventory.jump_cactus > 0) availableTraps.push('jump_cactus');
+          if (trapperInventory.low_bat > 0) availableTraps.push('low_bat');
+        }
+
+        if (availableTraps.length > 0) {
+          var chosen = availableTraps[Math.floor(Math.random() * availableTraps.length)];
+          trapperInventory[chosen]--;
+          var trapId = nextObstacleId++;
+          spawnObstacle(chosen, trapId);
+          if (!isSpectator) {
+            Hitsumabushi.sendGameData({
+              type: 'SPAWN_TRAP',
+              trapType: chosen,
+              trapId: trapId
+            });
+          }
+        }
+      }
+    }
+
+    function updateCpuRunner(delta) {
+      // 一番近い未通過の障害物を探す
+      var nearest = null;
+      for (var i = 0; i < obstacles.length; i++) {
+        var o = obstacles[i];
+        if (!o.passed && o.x > dino.x) {
+          if (!nearest || o.x < nearest.x) nearest = o;
+        }
+      }
+
+      if (nearest) {
+        var dist = nearest.x - dino.x;
+        // 回避タイミング（100〜140px手前）
+        if (dist > 80 && dist < 140) {
+          if (nearest.type === 'cactus') {
+            doJump();
+          } else if (nearest.type === 'bat') {
+            startDuck();
+          } else if (nearest.type === 'jump_cactus') {
+            // 初見殺し：60%の確率でサボテンに反射ジャンプして自爆！
+            if (Math.random() < 0.6) {
+              doJump();
+            } else {
+              startDuck();
+            }
+          } else if (nearest.type === 'low_bat') {
+            // 初見殺し：50%の確率でコウモリにしゃがんで自爆！
+            if (Math.random() < 0.5) {
+              startDuck();
+            } else {
+              doJump();
+            }
+          }
+        } else if (dist <= 30) {
+          stopDuck();
+        }
+      } else {
+        stopDuck();
+      }
+    }
+
+    /* ==========================================================================
+       ランナー操作（ジャンプ & しゃがみ）
+       ========================================================================== */
+    function doJump() {
+      if (dino.isGrounded && !dino.isDucking) {
+        dino.vy = dino.jumpStrength;
+        dino.isGrounded = false;
+        createParticles(dino.x + dino.width / 2, GROUND_Y, '#00f0ff', 6);
+
+        if (!isSpectator) {
+          Hitsumabushi.sendGameData({ type: 'DINO_ACTION', action: 'JUMP' });
+        }
+      }
+    }
+
+    function startDuck() {
+      if (dino.isGrounded) {
+        dino.isDucking = true;
+        if (!isSpectator) {
+          Hitsumabushi.sendGameData({ type: 'DINO_ACTION', action: 'DUCK_START' });
+        }
+      }
+    }
+
+    function stopDuck() {
+      if (dino.isDucking) {
+        dino.isDucking = false;
+        if (!isSpectator) {
+          Hitsumabushi.sendGameData({ type: 'DINO_ACTION', action: 'DUCK_END' });
+        }
+      }
+    }
+
+    // キーボード入力リスナー（ランナー＆トラッパー共通）
+    window.addEventListener('keydown', function (e) {
+      if (isSpectator) return;
+      if (localRole === 'RUNNER') {
+        if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+          e.preventDefault();
+          btnJump.classList.add('active');
+          doJump();
+        } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+          e.preventDefault();
+          btnDuck.classList.add('active');
+          startDuck();
+        }
+      } else if (localRole === 'TRAPPER') {
+        // トラッパーの数字キーショートカット [1, 2, 3, 4]
+        if (e.key === '1') triggerTrap('cactus');
+        else if (e.key === '2') triggerTrap('bat');
+        else if (e.key === '3') triggerTrap('jump_cactus');
+        else if (e.key === '4') triggerTrap('low_bat');
+      }
+    });
+
+    window.addEventListener('keyup', function (e) {
+      if (isSpectator) return;
+      if (localRole === 'RUNNER') {
+        if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+          btnJump.classList.remove('active');
+        } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+          btnDuck.classList.remove('active');
+          stopDuck();
+        }
+      }
+    });
+
+    // タッチ＆マウスボタンリスナー
+    btnJump.addEventListener('pointerdown', function (e) {
+      if (isSpectator) return;
+      e.preventDefault();
+      doJump();
+    });
+
+    btnDuck.addEventListener('pointerdown', function (e) {
+      if (isSpectator) return;
+      e.preventDefault();
+      startDuck();
+    });
+
+    window.addEventListener('pointerup', function () {
+      if (isSpectator) return;
+      stopDuck();
+    });
+
+    /* ==========================================================================
+       通信パケット処理 (onGameData)
+       ========================================================================== */
+    function handleRemoteData(data) {
+      if (!data || !data.type) return;
+
+      if (data.type === 'COUNTDOWN_TICK') {
+        overlay.classList.remove('hidden');
+        overlayTitle.textContent = 'ROUND 1';
+        overlayTitle.style.color = '#00f0ff';
+        overlaySub.innerHTML = '第1ラウンド開始まで... <span style="font-size:2rem; font-weight:900; color:#ffe600;">' + data.count + '</span>';
+      } else if (data.type === 'START_MATCH') {
+        startRound(1);
+      } else if (data.type === 'SPAWN_TRAP') {
+        // トラッパーから届いたトラップを生成
+        spawnObstacle(data.trapType, data.trapId);
+      } else if (data.type === 'DINO_ACTION') {
+        // ランナーの動作をトラッパー画面で同期
+        if (data.action === 'JUMP') {
+          doJump();
+          btnJump.classList.add('active');
+          setTimeout(function () { btnJump.classList.remove('active'); }, 180);
+        } else if (data.action === 'DUCK_START') {
+          startDuck();
+          btnDuck.classList.add('active');
+        } else if (data.action === 'DUCK_END') {
+          stopDuck();
+          btnDuck.classList.remove('active');
+        }
+      } else if (data.type === 'DINO_HIT') {
+        // ランナーが被弾した通知を受信
+        dino.hp = data.hp;
+        dino.invincibleTime = 1.5;
+        createHitParticles(dino.x + 20, dino.y + 20);
+        updateHearts();
+        if (dino.hp <= 0) {
+          finishRound(false);
+        }
+      }
+    }
+
+    /* ==========================================================================
+       当たり判定 & パーティクル
+       ========================================================================== */
+    function checkCollisions() {
+      if (isSpectator || localRole !== 'RUNNER') return;
+      if (dino.invincibleTime > 0) return;
+
+      var dinoBox = {
+        x: dino.x + 6,
+        y: dino.isDucking ? GROUND_Y - 26 : dino.y + 6,
+        width: dino.isDucking ? 52 : dino.width - 12,
+        height: dino.isDucking ? 24 : dino.height - 10
+      };
+
+      for (var i = 0; i < obstacles.length; i++) {
+        var obs = obstacles[i];
+        if (obs.passed) continue;
+
+        var obsBox = {
+          x: obs.x + 4,
+          y: obs.y + 4,
+          width: obs.width - 8,
+          height: obs.height - 6
+        };
+
+        // AABB 衝突判定
+        if (
+          dinoBox.x < obsBox.x + obsBox.width &&
+          dinoBox.x + dinoBox.width > obsBox.x &&
+          dinoBox.y < obsBox.y + obsBox.height &&
+          dinoBox.y + dinoBox.height > obsBox.y
+        ) {
+          // 激突！
+          obs.passed = true;
+          dino.hp--;
+          dino.invincibleTime = 1.5; // 1.5秒無敵点滅
+          createHitParticles(dino.x + 20, dino.y + 20);
+          updateHearts();
+
+          if (!isSpectator) {
+            Hitsumabushi.sendGameData({ type: 'DINO_HIT', hp: dino.hp, trapId: obs.id });
+          }
+
+          if (dino.hp <= 0) {
+            finishRound(false); // HPゼロでリタイア
+          }
+          break;
+        }
+      }
+    }
+
+    function createParticles(x, y, color, count) {
+      for (var i = 0; i < count; i++) {
+        particles.push({
+          x: x,
+          y: y,
+          vx: (Math.random() - 0.5) * 160,
+          vy: -Math.random() * 140,
+          color: color,
+          alpha: 1,
+          size: 3 + Math.random() * 3
+        });
+      }
+    }
+
+    function createHitParticles(x, y) {
+      createParticles(x, y, '#ff007f', 16);
+      createParticles(x, y, '#ffe600', 10);
+    }
+
+    /* ==========================================================================
+       メイン描画ループ (Canvas 2D / 60fps)
+       ========================================================================== */
+    var lastFrameTime = performance.now();
+
+    function gameLoop(time) {
+      var delta = (time - lastFrameTime) / 1000;
+      if (delta > 0.1) delta = 0.1; // フレーム落ちガード
+      lastFrameTime = time;
+
+      update(delta);
+      render();
+
+      requestAnimationFrame(gameLoop);
+    }
+    requestAnimationFrame(gameLoop);
+
+    function update(delta) {
+      // クールダウンバー更新
+      if (localRole === 'TRAPPER') {
+        var elapsed = performance.now() - lastTrapSpawnTime;
+        var progress = Math.min(1, elapsed / MIN_TRAP_INTERVAL);
+        cooldownBar.style.width = (progress * 100) + '%';
+        updateTrapperButtons();
+      }
+
+      if (currentPhase !== 'ROUND_1' && currentPhase !== 'ROUND_2') return;
+
+      // 恐竜の物理演算
+      if (!dino.isGrounded) {
+        dino.vy += dino.gravity * delta;
+        dino.y += dino.vy * delta;
+
+        if (dino.y >= GROUND_Y - dino.height) {
+          dino.y = GROUND_Y - dino.height;
+          dino.vy = 0;
+          dino.isGrounded = true;
+          createParticles(dino.x + dino.width / 2, GROUND_Y, '#00f0ff', 4);
+        }
+      }
+
+      if (dino.invincibleTime > 0) {
+        dino.invincibleTime -= delta;
+      }
+
+      // アニメーション足パタパタ
+      dino.animTimer += delta;
+      if (dino.animTimer > 0.08) {
+        dino.animTimer = 0;
+        dino.animFrame = (dino.animFrame + 1) % 2;
+      }
+
+      // 背景スクロール
+      bgOffset = (bgOffset + SCROLL_SPEED * delta) % 40;
+
+      // 障害物の移動 & 直前アクション演出
+      for (var i = obstacles.length - 1; i >= 0; i--) {
+        var obs = obstacles[i];
+        obs.x -= SCROLL_SPEED * delta;
+
+        var dist = obs.x - dino.x;
+
+        // 【必殺技の直前アクション】恐竜の手前150pxに迫った瞬間に急変！
+        if (!obs.hasTriggered && dist <= 150 && dist > 0) {
+          obs.hasTriggered = true;
+          if (obs.type === 'jump_cactus') {
+            // 地上サボテンが直前でロケット点火して上空へ急ホップ！（しゃがみで確実にくぐり抜けられる十分な高さ）
+            obs.targetY = GROUND_Y - 82;
+            createParticles(obs.x + 15, obs.y + obs.height, '#ff007f', 12);
+            createParticles(obs.x + 15, obs.y + obs.height, '#ffe600', 10);
+          } else if (obs.type === 'low_bat') {
+            // 中空コウモリが直前で地面スレスレへ急降下ダイブ！
+            obs.targetY = GROUND_Y - 26;
+            obs.height = 26;
+            createParticles(obs.x + 20, obs.y, '#00f0ff', 10);
+          }
+        }
+
+        // コウモリの波状浮遊（上下にふわふわダイナミック飛行）
+        var wave = 0;
+        if (obs.type === 'bat' || (obs.type === 'low_bat' && !obs.hasTriggered)) {
+          wave = Math.sin(obs.x * 0.035) * 8;
+        }
+
+        // Y座標のスムーズ急変イージング＋波状飛行
+        if (obs.targetY !== undefined) {
+          obs.baseY = (obs.baseY !== undefined ? obs.baseY : obs.y);
+          obs.baseY += (obs.targetY - obs.baseY) * Math.min(1, 16 * delta);
+          obs.y = obs.baseY + wave;
+        }
+
+        // 通過判定（恐竜の後ろへ抜けた）
+        if (!obs.passed && obs.x + obs.width < dino.x) {
+          obs.passed = true;
+          if (currentRound === 1) scores.p1.dodged++;
+          else scores.p2.dodged++;
+          updateScore();
+        }
+
+        // 画面外へ出たら消去
+        if (obs.x < -60) {
+          obstacles.splice(i, 1);
+        }
+      }
+
+      // ランナー自身がローカル当たり判定を管轄
+      if (localRole === 'RUNNER' || isCpuOpponent) {
+        checkCollisions();
+      }
+
+      // パーティクルの更新
+      for (var pIdx = particles.length - 1; pIdx >= 0; pIdx--) {
+        var p = particles[pIdx];
+        p.x += p.vx * delta;
+        p.y += p.vy * delta;
+        p.vy += 300 * delta;
+        p.alpha -= delta * 1.5;
+        if (p.alpha <= 0) {
+          particles.splice(pIdx, 1);
+        }
+      }
+    }
+
+    /* ==========================================================================
+       レンダリング (ネオン描画)
+       ========================================================================== */
+    function render() {
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // 1. 地面グリッドスクロール
+      renderGround();
+
+      // 2. 障害物の描画
+      renderObstacles();
+
+      // 3. 恐竜の描画
+      renderDino();
+
+      // 4. パーティクル
+      renderParticles();
+    }
+
+    function renderGround() {
+      ctx.save();
+      // メインネオンライン
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 10;
+
+      ctx.beginPath();
+      ctx.moveTo(0, GROUND_Y);
+      ctx.lineTo(CANVAS_WIDTH, GROUND_Y);
+      ctx.stroke();
+
+      // 地面グリッド縦線
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = 0;
+      for (var x = -bgOffset; x < CANVAS_WIDTH; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, GROUND_Y);
+        ctx.lineTo(x - 20, CANVAS_HEIGHT);
+        ctx.stroke();
+      }
+
+      // 地平線装飾（サイバーネット）
+      ctx.strokeStyle = 'rgba(255, 0, 127, 0.15)';
+      ctx.beginPath();
+      ctx.moveTo(0, GROUND_Y + 25);
+      ctx.lineTo(CANVAS_WIDTH, GROUND_Y + 25);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function renderDino() {
+      ctx.save();
+
+      // 無敵時の点滅
+      if (dino.invincibleTime > 0 && Math.floor(performance.now() / 80) % 2 === 0) {
+        ctx.globalAlpha = 0.3;
+      }
+
+      ctx.fillStyle = '#00f0ff';
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 12;
+
+      var dx = dino.x;
+      var dy = dino.y;
+
+      if (dino.isDucking && dino.isGrounded) {
+        // しゃがみ（スライディング）ポーズ
+        dy = GROUND_Y - 28;
+        // 胴体長め
+        ctx.fillRect(dx, dy + 8, 48, 16);
+        // 低い頭
+        ctx.fillRect(dx + 40, dy + 2, 16, 14);
+        // 目
+        ctx.fillStyle = '#0a0b10';
+        ctx.fillRect(dx + 50, dy + 4, 3, 3);
+        ctx.fillStyle = '#00f0ff';
+        // 足
+        var footOffset = (dino.animFrame === 0) ? 0 : 4;
+        ctx.fillRect(dx + 8 + footOffset, dy + 22, 8, 6);
+        ctx.fillRect(dx + 28 - footOffset, dy + 22, 8, 6);
+      } else {
+        // 通常ランポーズ
+        // 頭
+        ctx.fillRect(dx + 22, dy, 20, 18);
+        // 目
+        ctx.fillStyle = '#0a0b10';
+        ctx.fillRect(dx + 34, dy + 4, 3, 3);
+        ctx.fillStyle = '#00f0ff';
+        // 口の切れ込み
+        ctx.clearRect(dx + 30, dy + 12, 12, 3);
+        // 胴体
+        ctx.fillRect(dx + 8, dy + 16, 22, 24);
+        // 腕
+        ctx.fillRect(dx + 28, dy + 24, 8, 4);
+        // 尻尾
+        ctx.fillRect(dx, dy + 20, 10, 8);
+        ctx.fillRect(dx - 4, dy + 22, 6, 6);
+
+        // 足アニメーション
+        if (dino.isGrounded) {
+          if (dino.animFrame === 0) {
+            ctx.fillRect(dx + 10, dy + 38, 6, 16);
+            ctx.fillRect(dx + 20, dy + 38, 6, 12);
+          } else {
+            ctx.fillRect(dx + 10, dy + 38, 6, 12);
+            ctx.fillRect(dx + 20, dy + 38, 6, 16);
+          }
+        } else {
+          // ジャンプ中は足を揃える
+          ctx.fillRect(dx + 12, dy + 38, 12, 10);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function renderObstacles() {
+      for (var i = 0; i < obstacles.length; i++) {
+        var o = obstacles[i];
+        ctx.save();
+
+        if (o.type === 'cactus') {
+          // 🌵 通常サボテン（グリーンネオン）
+          ctx.fillStyle = '#39ff14';
+          ctx.shadowColor = '#39ff14';
+          ctx.shadowBlur = 10;
+
+          // 幹
+          ctx.fillRect(o.x + 10, o.y, 10, o.height);
+          // 左枝
+          ctx.fillRect(o.x, o.y + 12, 10, 6);
+          ctx.fillRect(o.x, o.y + 4, 6, 12);
+          // 右枝
+          ctx.fillRect(o.x + 18, o.y + 18, 10, 6);
+          ctx.fillRect(o.x + 22, o.y + 10, 6, 12);
+
+        } else if (o.type === 'bat') {
+          // 🦇 通常中空コウモリ（くりくりおめめの可愛いマスコットコウモリ）
+          renderCuteBat(o, '#ff007f', false);
+
+        } else if (o.type === 'jump_cactus') {
+          // 🚀 飛ぶサボテン（直前までは通常サボテンと100%同一！ホップした瞬間に初めてバーニアと大噴射が出現！）
+          ctx.fillStyle = o.hasTriggered ? '#ffe600' : '#39ff14';
+          ctx.shadowColor = o.hasTriggered ? '#ffe600' : '#39ff14';
+          ctx.shadowBlur = o.hasTriggered ? 14 : 10;
+
+          // サボテン本体
+          ctx.fillRect(o.x + 10, o.y, 10, o.height);
+          ctx.fillRect(o.x, o.y + 10, 10, 5);
+          ctx.fillRect(o.x, o.y + 4, 5, 10);
+          ctx.fillRect(o.x + 18, o.y + 16, 10, 5);
+          ctx.fillRect(o.x + 22, o.y + 10, 5, 10);
+
+          // ホップ発動後のみロケットバーニアと噴射炎を描画（走行中は一切バレない）
+          if (o.hasTriggered) {
+            // ロケットバーニア（下部）
+            ctx.fillStyle = '#ff007f';
+            ctx.fillRect(o.x + 8, o.y + o.height, 14, 5);
+
+            // 噴射炎エフェクト
+            var flameLen = 14 + Math.random() * 12;
+            ctx.fillStyle = '#00f0ff';
+            ctx.shadowColor = '#00f0ff';
+            ctx.beginPath();
+            ctx.moveTo(o.x + 9, o.y + o.height + 5);
+            ctx.lineTo(o.x + 15, o.y + o.height + 5 + flameLen);
+            ctx.lineTo(o.x + 21, o.y + o.height + 5);
+            ctx.fill();
+          }
+
+        } else if (o.type === 'low_bat') {
+          // 🦅 低空コウモリ（直前までは通常コウモリと同じ可愛さ、ダイブ後はキュートな滑空突進！）
+          renderCuteBat(o, o.hasTriggered ? '#00f0ff' : '#ff007f', o.hasTriggered);
+        }
+
+        ctx.restore();
+      }
+    }
+
+    function renderCuteBat(o, color, isDiving) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 12;
+
+      var cx = o.x + 24; // 中心X
+      var cy = o.y + 24; // 中心Y
+
+      var animTick = Math.floor(performance.now() / 100);
+      var wingState = animTick % 2; // 0: 上, 1: 下
+
+      if (isDiving) {
+        // ダイブ中：一生懸命前傾姿勢でスピード滑空！
+        // ちょこんとした丸い体
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 11, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ぴょこんとした耳
+        ctx.beginPath();
+        ctx.moveTo(cx - 7, cy - 6);
+        ctx.lineTo(cx - 10, cy - 14);
+        ctx.lineTo(cx - 2, cy - 7);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + 7, cy - 6);
+        ctx.lineTo(cx + 10, cy - 14);
+        ctx.lineTo(cx + 2, cy - 7);
+        ctx.fill();
+
+        // 大きなうるうる目
+        ctx.fillStyle = '#ffe600';
+        ctx.shadowColor = '#ffe600';
+        ctx.beginPath();
+        ctx.arc(cx - 4, cy - 1, 3.5, 0, Math.PI * 2);
+        ctx.arc(cx + 4, cy - 1, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        // 瞳のハイライト
+        ctx.fillStyle = '#0a0b10';
+        ctx.fillRect(cx - 4, cy - 1, 2, 2);
+        ctx.fillRect(cx + 4, cy - 1, 2, 2);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(cx - 5, cy - 2, 1.5, 1.5);
+        ctx.fillRect(cx + 3, cy - 2, 1.5, 1.5);
+
+        // ダイブ滑空翼
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        var dWing = (wingState === 0) ? -2 : 3;
+        ctx.beginPath();
+        ctx.moveTo(cx - 6, cy);
+        ctx.lineTo(cx - 22, cy - 6 + dWing);
+        ctx.lineTo(cx - 14, cy + 6);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + 6, cy);
+        ctx.lineTo(cx + 22, cy - 6 + dWing);
+        ctx.lineTo(cx + 14, cy + 6);
+        ctx.fill();
+
+        // スピードライン
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(o.x + 40, o.y + 16);
+        ctx.lineTo(o.x + 65, o.y + 10);
+        ctx.stroke();
+
+      } else {
+        // 通常飛行：コロンとした丸いボディとパタパタ羽ばたき
+        // まあるい可愛いお顔＆体
+        ctx.beginPath();
+        ctx.arc(cx, cy + 2, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ぴょこんとした可愛い三角耳
+        ctx.beginPath();
+        ctx.moveTo(cx - 8, cy - 6);
+        ctx.lineTo(cx - 11, cy - 17);
+        ctx.lineTo(cx - 2, cy - 8);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + 8, cy - 6);
+        ctx.lineTo(cx + 11, cy - 17);
+        ctx.lineTo(cx + 2, cy - 8);
+        ctx.fill();
+
+        // つぶらな大きなおめめ（うるうるネオンアイ）
+        ctx.fillStyle = '#ffe600';
+        ctx.shadowColor = '#ffe600';
+        ctx.beginPath();
+        ctx.arc(cx - 4, cy + 1, 4, 0, Math.PI * 2);
+        ctx.arc(cx + 4, cy + 1, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 瞳の黒目とハイライト（きらきら感）
+        ctx.fillStyle = '#0a0b10';
+        ctx.beginPath();
+        ctx.arc(cx - 4, cy + 1, 2.2, 0, Math.PI * 2);
+        ctx.arc(cx + 4, cy + 1, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(cx - 5, cy, 1.2, 0, Math.PI * 2);
+        ctx.arc(cx + 3, cy, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ちょこんとした小さなキバ
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(cx - 2, cy + 6);
+        ctx.lineTo(cx - 1, cy + 9);
+        ctx.lineTo(cx, cy + 6);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx, cy + 6);
+        ctx.lineTo(cx + 1, cy + 9);
+        ctx.lineTo(cx + 2, cy + 6);
+        ctx.fill();
+
+        // パタパタ羽ばたく可愛い翼（丸みのあるスカラップ）
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        var wingY = (wingState === 0) ? -10 : 8;
+        // 左翼
+        ctx.beginPath();
+        ctx.moveTo(cx - 8, cy + 2);
+        ctx.quadraticCurveTo(cx - 18, cy - 8 + wingY, cx - 24, cy + wingY);
+        ctx.quadraticCurveTo(cx - 16, cy + 10, cx - 7, cy + 10);
+        ctx.fill();
+        // 右翼
+        ctx.beginPath();
+        ctx.moveTo(cx + 8, cy + 2);
+        ctx.quadraticCurveTo(cx + 18, cy - 8 + wingY, cx + 24, cy + wingY);
+        ctx.quadraticCurveTo(cx + 16, cy + 10, cx + 7, cy + 10);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function renderParticles() {
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i];
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  </script>
+</body>
+</html>
