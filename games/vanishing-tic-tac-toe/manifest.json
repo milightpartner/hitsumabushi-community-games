@@ -1,0 +1,16 @@
+{
+  "gameId": "vanishing-tic-tac-toe",
+  "title": "消えるネオン三目並べ",
+  "version": "1.0.0",
+  "players": {
+    "min": 2,
+    "max": 2,
+    "type": "fixed",
+    "allowCpuFill": false
+  },
+  "creatorGithub": "milightpartner",
+  "resultModel": {
+    "type": "single_winner",
+    "allowTie": false
+  }
+}
