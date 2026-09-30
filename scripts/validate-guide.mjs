@@ -4,7 +4,7 @@
 // alongside an invalid guide.
 //
 // guide.md is turned into an HTML article page served under a Milight domain
-// (article.milightpartner.jp, OmoshiroGamePortal#382), so unlike a game's own JS it must never
+// (guide.milightpartner.jp, OmoshiroGamePortal#382), so unlike a game's own JS it must never
 // be able to carry markup or scripts of its own. This check is the early, friendly feedback
 // layer; the article build must still render Markdown without passing raw HTML through.
 import matter from 'gray-matter';
