@@ -1,0 +1,16 @@
+{
+  "gameId": "neon-tap-battle",
+  "title": "ネオン・タップバトル",
+  "version": "1.0.0",
+  "players": {
+    "min": 2,
+    "max": 2,
+    "type": "fixed",
+    "allowCpuFill": false
+  },
+  "creatorGithub": "milightpartner",
+  "resultModel": {
+    "type": "single_winner",
+    "allowTie": false
+  }
+}
