@@ -1,0 +1,20 @@
+{
+  "gameId": "neon-target-rush",
+  "title": "ネオン・ターゲットラッシュ",
+  "version": "1.0.0",
+  "players": {
+    "min": 2,
+    "max": 4,
+    "type": "variable",
+    "allowCpuFill": false
+  },
+  "teamBattle": {
+    "supported": true,
+    "mode": "two_teams"
+  },
+  "creatorGithub": "milightpartner",
+  "resultModel": {
+    "type": "single_winner",
+    "allowTie": false
+  }
+}
