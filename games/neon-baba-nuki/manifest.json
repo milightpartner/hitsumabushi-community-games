@@ -1,0 +1,16 @@
+{
+  "gameId": "neon-baba-nuki",
+  "title": "ネオン・ババ抜き",
+  "version": "1.0.0",
+  "players": {
+    "min": 2,
+    "max": 4,
+    "type": "variable",
+    "allowCpuFill": true
+  },
+  "creatorGithub": "milightpartner",
+  "resultModel": {
+    "type": "ranked",
+    "allowTie": false
+  }
+}

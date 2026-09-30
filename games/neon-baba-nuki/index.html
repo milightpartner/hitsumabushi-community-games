@@ -1,0 +1,1954 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ネオン・ババ抜き - Neon Baba-Nuki</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      background-color: #0a0b10;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      transition: background-color 0.3s;
+    }
+
+    body.transparent {
+      background-color: transparent !important;
+    }
+
+    /* ゲーム外枠 */
+    .game-table {
+      width: 100%;
+      max-width: 860px;
+      height: 100%;
+      max-height: 660px;
+      background: radial-gradient(circle at center, rgba(20, 26, 45, 0.92) 0%, rgba(10, 11, 16, 0.96) 100%);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      border-radius: 24px;
+      box-shadow: 0 0 40px rgba(0, 240, 255, 0.12), inset 0 0 60px rgba(0, 0, 0, 0.6);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 10px 14px;
+    }
+
+    /* 上部ヘッダー・情報バー */
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      height: 34px;
+      padding: 0 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .game-logo {
+      font-size: 0.95rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #00f0ff;
+      text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .game-turn-badge {
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 3px 12px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+    }
+
+    /* 4人テーブルレイアウト */
+    .table-layout {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 各プレイヤー席共通 */
+    .player-seat {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      z-index: 10;
+    }
+
+    /* 席の位置配置 (上=対面, 左, 右, 下=自分) */
+    .seat-top {
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .seat-left {
+      top: 36%;
+      left: 4px;
+      transform: translateY(-50%);
+    }
+
+    .seat-right {
+      top: 36%;
+      right: 4px;
+      transform: translateY(-50%);
+    }
+
+    .seat-bottom {
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      z-index: 30;
+    }
+
+    /* プレイヤー情報バッジ */
+    .player-info-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 20, 32, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 3px 10px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      margin-bottom: 4px;
+      transition: all 0.3s ease;
+    }
+
+    .player-info-card.active-turn {
+      border-color: #00f0ff;
+      box-shadow: 0 0 16px rgba(0, 240, 255, 0.5);
+      background: rgba(0, 240, 255, 0.12);
+      transform: scale(1.05);
+    }
+
+    .player-info-card.target-selectable {
+      border-color: #ff007f;
+      box-shadow: 0 0 16px rgba(255, 0, 127, 0.6);
+      animation: pulse-target 1.2s infinite;
+    }
+
+    @keyframes pulse-target {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+
+    .player-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 800;
+    }
+
+    .player-name-text {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      max-width: 90px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .player-cards-count {
+      font-size: 0.7rem;
+      font-weight: 800;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 2px 6px;
+      border-radius: 10px;
+      color: #00f0ff;
+    }
+
+    .rank-badge {
+      font-size: 0.7rem;
+      font-weight: 900;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: #ffe600;
+      color: #0a0b10;
+      margin-left: 4px;
+      animation: rank-appear 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes rank-appear {
+      0% { transform: scale(0); }
+      100% { transform: scale(1); }
+    }
+
+    /* 手札カード表示エリア */
+    .hand-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 64px;
+    }
+
+    /* 他人の手札（裏面） */
+    .opponent-hand {
+      display: flex;
+      gap: clamp(2px, 1vw, 5px);
+      align-items: flex-end;
+      min-height: clamp(52px, 8.5vh, 76px);
+      padding-top: clamp(10px, 2vh, 20px);
+    }
+
+    .opponent-card {
+      width: clamp(24px, 5.5vw, 36px);
+      height: clamp(36px, 8.2vw, 54px);
+      aspect-ratio: 36 / 54;
+      background: linear-gradient(135deg, #1e2538 0%, #111522 100%);
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      border-radius: clamp(3px, 0.8vw, 6px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+      position: relative;
+      cursor: default;
+      transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 1;
+    }
+
+    .opponent-card::before {
+      content: '';
+      width: 60%;
+      height: 70%;
+      border: 1px dashed rgba(0, 240, 255, 0.3);
+      border-radius: 3px;
+    }
+
+    /* 突き出し（高さをずらした）状態の相手カード */
+    .opponent-card.protruded {
+      transform: translateY(-16px) !important;
+      border-color: #ffe600 !important;
+      box-shadow: 0 0 16px rgba(255, 230, 0, 0.7) !important;
+    }
+
+    /* 引く対象のカード群（選択可能状態） */
+    .opponent-card.selectable {
+      cursor: pointer;
+      border-color: #ff007f;
+      box-shadow: 0 0 10px rgba(255, 0, 127, 0.5);
+    }
+
+    .opponent-card.selectable:hover {
+      transform: translateY(-10px) scale(1.12);
+      border-color: #ffe600;
+      box-shadow: 0 0 18px rgba(255, 230, 0, 0.8);
+      z-index: 25;
+    }
+
+    .opponent-card.selectable.protruded:hover {
+      transform: translateY(-24px) scale(1.12) !important;
+    }
+
+    /* 手札直上操作バー（並び替え・突き出しブラフガイド） */
+    .hand-controls-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 2px;
+      z-index: 40;
+    }
+
+    .btn-hand-shuffle {
+      background: rgba(0, 240, 255, 0.12);
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      color: #00f0ff;
+      border-radius: 16px;
+      min-width: 44px;
+      min-height: 36px;
+      padding: 4px 12px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .btn-hand-shuffle:hover {
+      background: rgba(0, 240, 255, 0.25);
+      border-color: #00f0ff;
+      transform: translateY(-1px);
+    }
+
+    .bluff-hint {
+      font-size: 0.74rem;
+      color: #94a3b8;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
+      padding: 3px 10px;
+    }
+
+    .bluff-hint .hint-icon {
+      font-size: 0.85rem;
+      color: #ffe600;
+    }
+
+    /* 右下フローティング：シャッフルダイス（JOKER必殺技） */
+    .fab-shuffle-btn {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      z-index: 50;
+      background: linear-gradient(135deg, #ffe600, #ff8800);
+      color: #0a0b10;
+      border: none;
+      border-radius: 26px;
+      min-width: 48px;
+      min-height: 48px;
+      padding: 8px 18px;
+      font-size: 0.88rem;
+      font-weight: 900;
+      letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 0 22px rgba(255, 230, 0, 0.55);
+      transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .fab-shuffle-btn:hover:not(:disabled) {
+      transform: scale(1.08) translateY(-2px);
+      box-shadow: 0 0 28px rgba(255, 230, 0, 0.85);
+    }
+
+    .fab-shuffle-btn:disabled {
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.3);
+      box-shadow: none;
+      cursor: not-allowed;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      opacity: 0.45;
+    }
+
+    .fab-shuffle-btn .btn-icon {
+      font-size: 1.2rem;
+    }
+
+    /* 自分の手札（表面） */
+    .my-hand {
+      display: flex;
+      gap: clamp(3px, 1.2vw, 8px);
+      justify-content: center;
+      align-items: flex-end;
+      min-height: clamp(68px, 11vh, 105px);
+      padding-top: clamp(14px, 2.8vh, 24px);
+      max-width: 96%;
+      margin: 0 auto;
+    }
+
+    .card {
+      width: clamp(34px, 8.2vw, 54px);
+      height: clamp(50px, 11.8vw, 78px);
+      aspect-ratio: 54 / 78;
+      background: linear-gradient(145deg, rgba(30, 36, 58, 0.95), rgba(18, 22, 38, 0.98));
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      border-radius: clamp(5px, 1.2vw, 9px);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(2px, 0.6vw, 5px);
+      cursor: pointer;
+      flex-shrink: 1;
+      transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 6px 18px rgba(0, 240, 255, 0.4);
+    }
+
+    /* 突き出し（高さをずらした）状態のカード */
+    .card.protruded {
+      transform: translateY(clamp(-14px, -2.5vh, -22px)) !important;
+      border-color: #ffe600 !important;
+      box-shadow: 0 0 20px rgba(255, 230, 0, 0.75) !important;
+    }
+
+    .card.suit-spade, .card.suit-club {
+      color: #00f0ff;
+      border-color: rgba(0, 240, 255, 0.35);
+    }
+
+    .card.suit-heart, .card.suit-diamond {
+      color: #ff007f;
+      border-color: rgba(255, 0, 127, 0.35);
+    }
+
+    .card.joker {
+      color: #ffe600;
+      background: linear-gradient(145deg, rgba(60, 20, 70, 0.95), rgba(25, 10, 35, 0.98));
+      border: 2px solid #ff007f;
+      box-shadow: 0 0 18px rgba(255, 0, 127, 0.5);
+      animation: joker-pulse 2s infinite ease-in-out;
+    }
+
+    @keyframes joker-pulse {
+      0%, 100% { border-color: #ff007f; box-shadow: 0 0 12px rgba(255, 0, 127, 0.4); }
+      50% { border-color: #39ff14; box-shadow: 0 0 22px rgba(57, 255, 20, 0.7); }
+    }
+
+    .card-corner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1;
+      font-size: clamp(0.55rem, 1.4vw, 0.72rem);
+      font-weight: 900;
+    }
+
+    .card-symbol {
+      font-size: clamp(0.55rem, 1.4vw, 0.72rem);
+    }
+
+    .card-center {
+      align-self: center;
+      font-size: clamp(0.85rem, 2.3vw, 1.3rem);
+      font-weight: 900;
+    }
+
+    .card.joker .card-center {
+      font-size: clamp(1rem, 2.8vw, 1.5rem);
+    }
+
+    /* 中央エリア（メッセージ、タイマー） */
+    .center-stage {
+      position: absolute;
+      top: 45%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      z-index: 5;
+      width: 280px;
+      pointer-events: none;
+    }
+
+    .center-msg {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      text-align: center;
+      background: rgba(10, 12, 20, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 6px 16px;
+      border-radius: 20px;
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    /* タイマーバー */
+    .timer-wrap {
+      width: 160px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .timer-bar {
+      height: 100%;
+      width: 100%;
+      background: #00f0ff;
+      transition: width 0.1s linear, background-color 0.3s;
+    }
+
+    /* 3Dサイコロ演出モーダル */
+    .dice-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(5, 6, 12, 0.85);
+      backdrop-filter: blur(8px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .dice-title {
+      font-size: 1.3rem;
+      font-weight: 900;
+      color: #ffe600;
+      letter-spacing: 2px;
+      margin-bottom: 24px;
+      text-shadow: 0 0 15px rgba(255, 230, 0, 0.6);
+    }
+
+    .dice-box {
+      width: 100px;
+      height: 100px;
+      background: rgba(22, 26, 42, 0.95);
+      border: 3px solid #ffe600;
+      border-radius: 20px;
+      box-shadow: 0 0 30px rgba(255, 230, 0, 0.4), inset 0 0 15px rgba(255, 230, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.2rem;
+      transition: transform 0.1s;
+    }
+
+    .dice-box.rolling {
+      animation: dice-spin 0.6s infinite linear;
+    }
+
+    @keyframes dice-spin {
+      0% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(180deg) scale(1.15); }
+      100% { transform: rotate(360deg) scale(1); }
+    }
+
+    .dice-name {
+      font-size: 0.85rem;
+      font-weight: 800;
+      margin-top: 4px;
+    }
+
+    .dice-desc {
+      margin-top: 18px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #00f0ff;
+      text-align: center;
+      min-height: 28px;
+    }
+
+    /* 最終結果・ランキングオーバーレイ */
+    .result-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(10, 12, 20, 0.92);
+      backdrop-filter: blur(14px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      border-radius: 28px;
+      padding: 20px;
+    }
+
+    .result-title {
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: #00f0ff;
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+      text-shadow: 0 0 20px rgba(0, 240, 255, 0.6);
+    }
+
+    .ranking-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      max-width: 380px;
+      margin-bottom: 24px;
+    }
+
+    .ranking-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .ranking-row.rank-1 {
+      border-color: #ffe600;
+      background: rgba(255, 230, 0, 0.12);
+      box-shadow: 0 0 15px rgba(255, 230, 0, 0.3);
+    }
+
+    .ranking-row.rank-4 {
+      border-color: #ff007f;
+      background: rgba(255, 0, 127, 0.1);
+    }
+
+    .rank-num {
+      font-size: 1.1rem;
+      font-weight: 900;
+      width: 32px;
+    }
+
+    .rank-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      flex: 1;
+      margin-left: 8px;
+    }
+
+    .rank-label {
+      font-size: 0.8rem;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    /* --------------------------------------------------------------------------
+       レスポンシブ最適化 (モバイル・狭小画面対応)
+       -------------------------------------------------------------------------- */
+    /* ① モバイル画面幅（640px以下）: ボタンをアイコン化、左右席と中央メッセージの重なり解消 */
+    @media (max-width: 640px) {
+      .game-table {
+        border-radius: 18px;
+        padding: 6px 8px;
+      }
+
+      .table-header {
+        height: 28px;
+      }
+
+      .game-logo {
+        font-size: 0.82rem;
+        letter-spacing: 0.5px;
+      }
+
+      .game-turn-badge {
+        font-size: 0.72rem;
+        padding: 2px 8px;
+      }
+
+      /* 左右席を上部に逃がし、中央メッセージと高さ（Y軸）を完全分離 */
+      .seat-left {
+        top: 26%;
+        left: 4px;
+      }
+
+      .seat-right {
+        top: 26%;
+        right: 4px;
+      }
+
+      /* 中央メッセージを左右席の下、自分手札の上の空間に配置 */
+      .center-stage {
+        top: 48%;
+        width: 88%;
+        max-width: 280px;
+        gap: 6px;
+      }
+
+      .center-msg {
+        font-size: 0.8rem;
+        padding: 4px 10px;
+        min-height: 28px;
+      }
+
+      .timer-wrap {
+        width: 120px;
+        height: 3px;
+      }
+
+      /* ボタンのテキスト省略＋アイコン化（ガイドライン準拠: 44×44pxのタッチ領域を維持） */
+      .fab-shuffle-btn {
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
+        min-height: 48px;
+        padding: 0;
+        border-radius: 50%;
+        justify-content: center;
+        font-size: 1.3rem;
+        right: 12px;
+        bottom: 12px;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+
+      .fab-shuffle-btn .btn-label {
+        display: none !important;
+      }
+
+      .hand-controls-bar {
+        gap: 8px;
+        margin-bottom: 2px;
+      }
+
+      .bluff-hint {
+        font-size: 0.68rem;
+        padding: 2px 8px;
+      }
+
+      .bluff-hint .hint-icon {
+        font-size: 0.78rem;
+      }
+    }
+
+    /* ② 極小画面幅（スマホ縦持ち 420px以下） */
+    @media (max-width: 420px) {
+      .player-info-card {
+        padding: 2px 6px;
+        gap: 4px;
+      }
+
+      .player-name-text {
+        max-width: 52px;
+        font-size: 0.68rem;
+      }
+
+      .player-cards-count {
+        font-size: 0.65rem;
+        padding: 1px 4px;
+      }
+
+      .player-avatar {
+        width: 20px;
+        height: 20px;
+        font-size: 0.65rem;
+      }
+
+      .seat-left {
+        left: 2px;
+        top: 25%;
+      }
+
+      .seat-right {
+        right: 2px;
+        top: 25%;
+      }
+
+      .center-stage {
+        top: 48%;
+        width: 90%;
+        max-width: 260px;
+      }
+
+      .fab-shuffle-btn {
+        right: 8px;
+        bottom: 8px;
+      }
+    }
+
+    /* ③ 低画面高（ノートPC・デスクトップ・スマホ横持ち等 560px以下）: 余白のみ縮小、ボタンは丸めない */
+    @media (max-height: 560px) {
+      .game-table {
+        padding: 6px 10px;
+      }
+
+      .table-header {
+        height: 26px;
+      }
+
+      .my-hand {
+        padding-top: 10px;
+        min-height: 58px;
+      }
+
+      .opponent-hand {
+        padding-top: 8px;
+        min-height: 44px;
+      }
+
+      .hand-controls-bar {
+        margin-bottom: 1px;
+      }
+    }
+
+    /* ④ 極低画面高（480px以下） */
+    @media (max-height: 480px) {
+      .game-table {
+        padding: 4px 6px;
+        border-radius: 14px;
+      }
+
+      .table-header {
+        height: 22px;
+      }
+
+      .seat-top {
+        top: 0px;
+      }
+
+      .seat-left, .seat-right {
+        top: 25%;
+      }
+
+      .center-stage {
+        top: 44%;
+      }
+
+      .my-hand {
+        padding-top: 6px;
+        min-height: 48px;
+      }
+
+      .opponent-hand {
+        padding-top: 4px;
+        min-height: 36px;
+      }
+
+      .hand-controls-bar {
+        margin-bottom: 0;
+      }
+
+      .fab-shuffle-btn {
+        right: 8px;
+        bottom: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="game-table" id="gameTable">
+    <!-- 上部ヘッダー -->
+    <div class="table-header">
+      <div class="game-logo">
+        <span>🃏</span> NEON BABA-NUKI
+      </div>
+      <div class="game-turn-badge" id="turnBadge">ゲーム準備中...</div>
+    </div>
+
+    <!-- 4人卓レイアウト -->
+    <div class="table-layout">
+      <!-- 席: TOP (席2) -->
+      <div class="player-seat seat-top" id="seat-1">
+        <div class="player-info-card" id="info-1">
+          <div class="player-avatar" id="avatar-1">P2</div>
+          <div class="player-name-text" id="name-1">待機中...</div>
+          <div class="player-cards-count" id="count-1">0枚</div>
+        </div>
+        <div class="hand-container">
+          <div class="opponent-hand" id="hand-1"></div>
+        </div>
+      </div>
+
+      <!-- 席: LEFT (席1) -->
+      <div class="player-seat seat-left" id="seat-2">
+        <div class="player-info-card" id="info-2">
+          <div class="player-avatar" id="avatar-2">P3</div>
+          <div class="player-name-text" id="name-2">待機中...</div>
+          <div class="player-cards-count" id="count-2">0枚</div>
+        </div>
+        <div class="hand-container">
+          <div class="opponent-hand" id="hand-2"></div>
+        </div>
+      </div>
+
+      <!-- 席: RIGHT (席3) -->
+      <div class="player-seat seat-right" id="seat-3">
+        <div class="player-info-card" id="info-3">
+          <div class="player-avatar" id="avatar-3">P4</div>
+          <div class="player-name-text" id="name-3">待機中...</div>
+          <div class="player-cards-count" id="count-3">0枚</div>
+        </div>
+        <div class="hand-container">
+          <div class="opponent-hand" id="hand-3"></div>
+        </div>
+      </div>
+
+      <!-- 中央エリア（メッセージ・タイマーのみ） -->
+      <div class="center-stage">
+        <div class="center-msg" id="centerMsg">対戦相手を待っています...</div>
+        <div class="timer-wrap">
+          <div class="timer-bar" id="timerBar"></div>
+        </div>
+      </div>
+
+      <!-- 席: BOTTOM (自分) -->
+      <div class="player-seat seat-bottom" id="seat-0">
+        <!-- 1. プレイヤー情報バッジ -->
+        <div class="player-info-card" id="info-0">
+          <div class="player-avatar" id="avatar-0">YOU</div>
+          <div class="player-name-text" id="name-0">あなた</div>
+          <div class="player-cards-count" id="count-0">0枚</div>
+        </div>
+
+        <!-- 2. 手札直上操作バー（手札並び替え ＆ ブラフ操作ガイド） -->
+        <div class="hand-controls-bar">
+          <button class="btn-hand-shuffle" id="btnHandShuffle" title="自分の手札の並び順をシャッフル" aria-label="手札並び替え">
+            <span class="btn-icon">🔀</span>
+            <span class="btn-label">並替</span>
+          </button>
+          <span class="bluff-hint" title="カードをタップすると相手に向けて突き出します">
+            <span class="hint-icon">⬆️</span>
+            <span class="hint-text">タップで突き出し</span>
+          </span>
+        </div>
+
+        <!-- 3. 手札カード -->
+        <div class="hand-container">
+          <div class="my-hand" id="hand-0"></div>
+        </div>
+      </div>
+
+      <!-- 右下フローティング：シャッフルダイス（JOKER必殺技） -->
+      <button class="fab-shuffle-btn" id="btnShuffle" disabled title="シャッフルダイスを振る" aria-label="シャッフル">
+        <span class="btn-icon">🎲</span>
+        <span class="btn-label">SHUFFLE</span>
+      </button>
+    </div>
+
+    <!-- サイコロ演出オーバーレイ -->
+    <div class="dice-overlay" id="diceOverlay">
+      <div class="dice-title" id="diceTitle">SHUFFLE CHANCE!</div>
+      <div class="dice-box" id="diceBox">
+        <span id="diceIcon">🎲</span>
+        <span class="dice-name" id="diceName">ROLL</span>
+      </div>
+      <div class="dice-desc" id="diceDesc">ダイスを振っています...</div>
+    </div>
+
+    <!-- 最終結果・ランキングオーバーレイ -->
+    <div class="result-overlay" id="resultOverlay">
+      <div class="result-title">MATCH FINISHED</div>
+      <div class="ranking-list" id="rankingList"></div>
+    </div>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script>
+  <script>
+    // ==========================================
+    // ネオン・ババ抜き ゲームロジック
+    // ==========================================
+
+    const SUITS = [
+      { id: 'spade', symbol: '♠', css: 'suit-spade' },
+      { id: 'heart', symbol: '♥', css: 'suit-heart' },
+      { id: 'diamond', symbol: '♦', css: 'suit-diamond' },
+      { id: 'club', symbol: '♣', css: 'suit-club' }
+    ];
+    const RANKS = [1, 2, 3, 4, 5, 6, 7];
+
+    let myPlayerId = null;
+    let isSpectator = false;
+    let isHost = false;
+    let players = [];
+    let playerSeats = [];
+    let hands = {};
+    let finishedRankings = [];
+    let activePlayerId = null;
+    let targetPlayerId = null;
+    let turnTimer = null;
+    let timeLeft = 15;
+    const TURN_DURATION = 15;
+    const PREPARE_DURATION = 5; // 手札整理・駆け引きインターバル（秒）
+    let usedShuffle = {};
+    let isGameOver = false;
+
+    // 排他制御フラグ（2枚引き防止）
+    let isActionLocked = false;
+    let isPreparingHand = false; // 手札整理インターバル中フラグ
+    let prepareTimer = null;
+    let prepareInterval = null;
+
+    // 突き出し（高さをずらす）状態の管理: { [playerId]: cardIndex | null }
+    let protrudedMap = {};
+    let myProtrudedCardUid = null;
+
+    // DOM要素
+    const centerMsg = document.getElementById('centerMsg');
+    const turnBadge = document.getElementById('turnBadge');
+    const timerBar = document.getElementById('timerBar');
+    const btnShuffle = document.getElementById('btnShuffle');
+    const btnHandShuffle = document.getElementById('btnHandShuffle');
+    const diceOverlay = document.getElementById('diceOverlay');
+    const diceBox = document.getElementById('diceBox');
+    const diceIcon = document.getElementById('diceIcon');
+    const diceName = document.getElementById('diceName');
+    const diceDesc = document.getElementById('diceDesc');
+    const resultOverlay = document.getElementById('resultOverlay');
+    const rankingList = document.getElementById('rankingList');
+
+    Hitsumabushi.init({
+      onStartMatch: function (config) {
+        resetGame(config);
+      },
+      onObsModeChange: function (isObs) {
+        document.body.classList.toggle('transparent', isObs);
+      },
+      onGameData: function (payload, senderId) {
+        handleGameData(payload, senderId);
+      }
+    });
+
+    function resetGame(config) {
+      isGameOver = false;
+      isActionLocked = false;
+      isPreparingHand = false;
+      finishedRankings = [];
+      usedShuffle = {};
+      protrudedMap = {};
+      myProtrudedCardUid = null;
+      resultOverlay.style.display = 'none';
+      diceOverlay.style.display = 'none';
+      clearInterval(turnTimer);
+      clearTimeout(prepareTimer);
+      clearInterval(prepareInterval);
+
+      isSpectator = Hitsumabushi.isSpectator();
+      myPlayerId = isSpectator ? null : (config.localPlayerId || 'p1');
+      const firstHuman = (config.players || []).find(function (p) { return !p.isCpu; });
+      isHost = !isSpectator && firstHuman && (myPlayerId === firstHuman.id);
+
+      if (btnHandShuffle) {
+        btnHandShuffle.disabled = isSpectator;
+      }
+      const hand0 = document.getElementById('hand-0');
+      if (hand0) {
+        hand0.style.pointerEvents = isSpectator ? 'none' : 'auto';
+      }
+
+      if (config.isObsMode) {
+        document.body.classList.add('transparent');
+      }
+
+      const incoming = (config.players && config.players.length > 0)
+        ? config.players
+        : [{ id: 'p1', name: 'Player 1', isCpu: false }];
+
+      players = [];
+      const defaultColors = ['#00f0ff', '#ff007f', '#ffe600', '#39ff14'];
+
+      for (let i = 0; i < 4; i++) {
+        if (i < incoming.length) {
+          const p = incoming[i];
+          players.push({
+            id: p.id || `p${i + 1}`,
+            name: p.name || `Player ${i + 1}`,
+            isCpu: !!p.isCpu,
+            color: p.color || defaultColors[i],
+            slotIndex: i
+          });
+        } else {
+          players.push({
+            id: `p${i + 1}`,
+            name: `BOT ${i + 1}`,
+            isCpu: true,
+            color: defaultColors[i],
+            slotIndex: i
+          });
+        }
+      }
+
+      setupSeatMapping();
+      updateSeatsDisplay();
+
+      if (isHost) {
+        startNewRound();
+      }
+    }
+
+    function setupSeatMapping() {
+      playerSeats = [];
+      const myIdx = players.findIndex(p => p.id === myPlayerId);
+      const safeIdx = myIdx >= 0 ? myIdx : 0;
+
+      playerSeats[0] = players[safeIdx];
+      playerSeats[1] = players[(safeIdx + 2) % 4];
+      playerSeats[2] = players[(safeIdx + 3) % 4];
+      playerSeats[3] = players[(safeIdx + 1) % 4];
+    }
+
+    function startNewRound() {
+      // 1. 席順（卓の並び順）をランダムシャッフル (Fisher-Yates)
+      for (let i = players.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [players[i], players[j]] = [players[j], players[i]];
+      }
+      setupSeatMapping();
+
+      // 2. 最初の手番（親）をランダムに決定
+      const randomFirstIdx = Math.floor(Math.random() * players.length);
+      activePlayerId = players[randomFirstIdx].id;
+      targetPlayerId = getTargetPlayerFor(activePlayerId);
+
+      // 3. デッキ生成・シャッフル・配布
+      let deck = [];
+      let cardUid = 1;
+      SUITS.forEach(s => {
+        RANKS.forEach(r => {
+          deck.push({ uid: cardUid++, suit: s.id, rank: r, isJoker: false });
+        });
+      });
+      deck.push({ uid: cardUid++, suit: 'joker', rank: 0, isJoker: true });
+
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+
+      hands = {};
+      players.forEach(p => { hands[p.id] = []; });
+      let pIdx = 0;
+      while (deck.length > 0) {
+        hands[players[pIdx % 4].id].push(deck.pop());
+        pIdx++;
+      }
+
+      players.forEach(p => {
+        hands[p.id] = discardPairs(hands[p.id]);
+      });
+
+      broadcastSyncState('ROUND_START');
+      startTurnTimer();
+      handleCpuTurnIfNeeded();
+    }
+
+    function discardPairs(cardList) {
+      const counts = {};
+      cardList.forEach(c => {
+        if (!c.isJoker) {
+          counts[c.rank] = (counts[c.rank] || 0) + 1;
+        }
+      });
+
+      const remaining = [];
+      const discardedRanks = new Set();
+
+      cardList.forEach(c => {
+        if (c.isJoker) {
+          remaining.push(c);
+        } else {
+          if (counts[c.rank] % 2 === 1) {
+            if (!discardedRanks.has(c.rank)) {
+              remaining.push(c);
+              discardedRanks.add(c.rank);
+            }
+          }
+        }
+      });
+
+      return remaining;
+    }
+
+    function getTargetPlayerFor(currentId) {
+      const activeSurvivors = players.filter(p => !finishedRankings.includes(p.id));
+      if (activeSurvivors.length <= 1) return null;
+
+      const curIdx = activeSurvivors.findIndex(p => p.id === currentId);
+      if (curIdx === -1) return null;
+
+      const targetIdx = (curIdx + activeSurvivors.length - 1) % activeSurvivors.length;
+      return activeSurvivors[targetIdx].id;
+    }
+
+    function advanceTurn() {
+      checkPlayerFinishes();
+
+      const activeSurvivors = players.filter(p => !finishedRankings.includes(p.id));
+
+      if (activeSurvivors.length <= 1) {
+        if (activeSurvivors.length === 1) {
+          finishedRankings.push(activeSurvivors[0].id);
+        }
+        endGame();
+        return;
+      }
+
+      let curIdx = activeSurvivors.findIndex(p => p.id === activePlayerId);
+      curIdx = (curIdx + 1) % activeSurvivors.length;
+      activePlayerId = activeSurvivors[curIdx].id;
+      targetPlayerId = getTargetPlayerFor(activePlayerId);
+
+      // 手札整理インターバル（5秒）の開始
+      isPreparingHand = true;
+      isActionLocked = true;
+      startPrepareTimer();
+
+      broadcastSyncState('TURN_PREPARING', {
+        activePlayerId: activePlayerId,
+        targetPlayerId: targetPlayerId
+      });
+
+      clearTimeout(prepareTimer);
+      prepareTimer = setTimeout(() => {
+        if (isGameOver) return;
+        startTurnActionPhase();
+      }, PREPARE_DURATION * 1000);
+    }
+
+    function startPrepareTimer() {
+      clearInterval(turnTimer);
+      clearInterval(prepareInterval);
+      let prepareLeft = PREPARE_DURATION;
+      timerBar.style.width = '100%';
+      timerBar.style.backgroundColor = '#a855f7';
+
+      prepareInterval = setInterval(() => {
+        prepareLeft -= 0.1;
+        const pct = Math.max(0, (prepareLeft / PREPARE_DURATION) * 100);
+        timerBar.style.width = pct + '%';
+
+        if (prepareLeft <= 0) {
+          clearInterval(prepareInterval);
+        }
+      }, 100);
+    }
+
+    function startTurnActionPhase() {
+      clearInterval(prepareInterval);
+      isPreparingHand = false;
+      isActionLocked = false;
+
+      broadcastSyncState('TURN_START', {
+        activePlayerId: activePlayerId,
+        targetPlayerId: targetPlayerId
+      });
+
+      startTurnTimer();
+      handleCpuTurnIfNeeded();
+    }
+
+    function checkPlayerFinishes() {
+      players.forEach(p => {
+        if (!finishedRankings.includes(p.id) && hands[p.id] && hands[p.id].length === 0) {
+          finishedRankings.push(p.id);
+        }
+      });
+    }
+
+    function startTurnTimer() {
+      clearInterval(turnTimer);
+      clearInterval(prepareInterval);
+      timeLeft = TURN_DURATION;
+      timerBar.style.width = '100%';
+      timerBar.style.backgroundColor = '#00f0ff';
+
+      turnTimer = setInterval(() => {
+        timeLeft -= 0.1;
+        const pct = Math.max(0, (timeLeft / TURN_DURATION) * 100);
+        timerBar.style.width = pct + '%';
+
+        if (pct < 30) {
+          timerBar.style.backgroundColor = '#ff007f';
+        }
+
+        if (timeLeft <= 0) {
+          clearInterval(turnTimer);
+          if (isHost && !isActionLocked && !isPreparingHand) {
+            handleTimeOutAction();
+          }
+        }
+      }, 100);
+    }
+
+    function handleTimeOutAction() {
+      if (!targetPlayerId || !hands[targetPlayerId] || hands[targetPlayerId].length === 0) {
+        advanceTurn();
+        return;
+      }
+      const randCardIdx = Math.floor(Math.random() * hands[targetPlayerId].length);
+      executeDrawCard(activePlayerId, targetPlayerId, randCardIdx);
+    }
+
+    // カードを引く処理（排他ロックで2枚引きを徹底防止）
+    function executeDrawCard(drawerId, fromId, cardIndex) {
+      if (isGameOver) return;
+      if (!hands[fromId] || cardIndex < 0 || cardIndex >= hands[fromId].length) return;
+
+      isActionLocked = true; // ロック
+
+      const drawnCard = hands[fromId].splice(cardIndex, 1)[0];
+
+      // ① 引かれた側のあがり判定（カードを引かれて0枚になった瞬間に先にあがり！）
+      if (hands[fromId].length === 0 && !finishedRankings.includes(fromId)) {
+        finishedRankings.push(fromId);
+      }
+
+      // 引いたカードを手札のランダムな位置に挿入（右端固定を防止）
+      const insertPos = Math.floor(Math.random() * (hands[drawerId].length + 1));
+      hands[drawerId].splice(insertPos, 0, drawnCard);
+
+      // ペア破棄チェック
+      hands[drawerId] = discardPairs(hands[drawerId]);
+
+      // ② 引いた側のあがり判定（ペアが揃って手札が0枚になったら続いてあがり！）
+      if (hands[drawerId].length === 0 && !finishedRankings.includes(drawerId)) {
+        finishedRankings.push(drawerId);
+      }
+
+      // 突き出しインデックスをリセット（両画面完全同期）
+      protrudedMap[fromId] = null;
+      protrudedMap[drawerId] = null;
+      if (fromId === myPlayerId) {
+        myProtrudedCardUid = null;
+      }
+
+      broadcastSyncState('CARD_DRAWN', {
+        drawerId: drawerId,
+        fromId: fromId
+      });
+
+      setTimeout(() => {
+        if (isHost) {
+          advanceTurn();
+        }
+      }, 1100);
+    }
+
+    function handleCpuTurnIfNeeded() {
+      if (!isHost || isGameOver || isPreparingHand) return;
+      const curPlayer = players.find(p => p.id === activePlayerId);
+      if (!curPlayer || !curPlayer.isCpu) return;
+
+      setTimeout(() => {
+        if (isGameOver || activePlayerId !== curPlayer.id || isActionLocked || isPreparingHand) return;
+
+        const hasJoker = hands[curPlayer.id]?.some(c => c.isJoker);
+        const survivorsCount = players.filter(p => !finishedRankings.includes(p.id)).length;
+        if (hasJoker && survivorsCount >= 3 && !usedShuffle[curPlayer.id] && Math.random() < 0.35) {
+          triggerShuffle(curPlayer.id);
+          return;
+        }
+
+        // CPUのブラフ：たまに自分のカードを突き出す
+        if (hands[curPlayer.id] && hands[curPlayer.id].length > 1 && Math.random() < 0.4) {
+          const randProtrude = Math.floor(Math.random() * hands[curPlayer.id].length);
+          protrudedMap[curPlayer.id] = randProtrude;
+          Hitsumabushi.sendGameData({
+            type: 'PROTRUDE_SYNC',
+            playerId: curPlayer.id,
+            cardIndex: randProtrude
+          });
+        }
+
+        if (targetPlayerId && hands[targetPlayerId] && hands[targetPlayerId].length > 0) {
+          // 相手が突き出しているカードがあれば、確率でそれを引くか避けるかのAI心理
+          let chosenIdx = Math.floor(Math.random() * hands[targetPlayerId].length);
+          const oppProtruded = protrudedMap[targetPlayerId];
+          if (oppProtruded !== null && oppProtruded !== undefined && oppProtruded < hands[targetPlayerId].length) {
+            // 50%で飛び出たカードをあえて引く
+            if (Math.random() < 0.5) {
+              chosenIdx = oppProtruded;
+            }
+          }
+          executeDrawCard(curPlayer.id, targetPlayerId, chosenIdx);
+        } else {
+          advanceTurn();
+        }
+      }, 1200);
+    }
+
+    // ==========================================
+    // シャッフルダイス機能
+    // ==========================================
+
+    btnShuffle.addEventListener('click', () => {
+      if (isSpectator || btnShuffle.disabled || isGameOver || isActionLocked) return;
+      if (activePlayerId !== myPlayerId) return; // 自分の手番中のみ
+
+      const hasJoker = hands[myPlayerId]?.some(c => c.isJoker);
+      if (!hasJoker) return;
+
+      if (isHost) {
+        triggerShuffle(myPlayerId);
+      } else {
+        Hitsumabushi.sendGameData({ type: 'REQ_SHUFFLE', playerId: myPlayerId });
+      }
+    });
+
+    // 自分の手札並び替えボタン
+    btnHandShuffle.addEventListener('click', () => {
+      if (isSpectator || isGameOver || !myPlayerId || !hands[myPlayerId] || hands[myPlayerId].length <= 1) return;
+
+      // 手札をFisher-Yatesシャッフル
+      const myHand = hands[myPlayerId];
+      for (let i = myHand.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [myHand[i], myHand[j]] = [myHand[j], myHand[i]];
+      }
+
+      // 突き出しカードの再計算
+      if (myProtrudedCardUid) {
+        const newIdx = myHand.findIndex(c => c.uid === myProtrudedCardUid);
+        protrudedMap[myPlayerId] = newIdx >= 0 ? newIdx : null;
+      }
+
+      updateSeatsDisplay();
+
+      // 他クライアントへ突き出し位置を同期
+      Hitsumabushi.sendGameData({
+        type: 'PROTRUDE_SYNC',
+        playerId: myPlayerId,
+        cardIndex: protrudedMap[myPlayerId]
+      });
+    });
+
+    function triggerShuffle(initiatorId) {
+      if (initiatorId !== activePlayerId) return; // 手番プレイヤー以外はシャッフル不可
+      if (usedShuffle[initiatorId] || isGameOver) return;
+      usedShuffle[initiatorId] = true;
+      isActionLocked = true;
+      clearInterval(turnTimer);
+
+      const survivors = players.filter(p => !finishedRankings.includes(p.id));
+      const count = survivors.length;
+
+      if (count < 3) return;
+
+      let diceRoll = 'skull';
+      const rand = Math.random();
+
+      if (count >= 4) {
+        if (rand < 0.3333) {
+          diceRoll = 'right1';
+        } else if (rand < 0.6666) {
+          diceRoll = 'left1';
+        } else if (rand < 0.8333) {
+          diceRoll = 'opposite';
+        } else {
+          diceRoll = 'skull';
+        }
+      } else {
+        if (rand < 0.40) {
+          diceRoll = 'right1';
+        } else if (rand < 0.80) {
+          diceRoll = 'left1';
+        } else {
+          diceRoll = 'skull';
+        }
+      }
+
+      broadcastSyncState('START_DICE_ROLL', {
+        initiatorId: initiatorId,
+        diceRoll: diceRoll,
+        survivorsCount: count
+      });
+
+      setTimeout(() => {
+        applyShuffleSwap(diceRoll, survivors);
+      }, 2500);
+    }
+
+    function applyShuffleSwap(roll, survivors) {
+      if (roll === 'right1') {
+        const firstHand = hands[survivors[0].id];
+        for (let i = 0; i < survivors.length - 1; i++) {
+          hands[survivors[i].id] = hands[survivors[i + 1].id];
+        }
+        hands[survivors[survivors.length - 1].id] = firstHand;
+      } else if (roll === 'left1') {
+        const lastHand = hands[survivors[survivors.length - 1].id];
+        for (let i = survivors.length - 1; i > 0; i--) {
+          hands[survivors[i].id] = hands[survivors[i - 1].id];
+        }
+        hands[survivors[0].id] = lastHand;
+      } else if (roll === 'opposite' && survivors.length === 4) {
+        [hands[survivors[0].id], hands[survivors[2].id]] = [hands[survivors[2].id], hands[survivors[0].id]];
+        [hands[survivors[1].id], hands[survivors[3].id]] = [hands[survivors[3].id], hands[survivors[1].id]];
+      }
+
+      survivors.forEach(p => {
+        hands[p.id] = discardPairs(hands[p.id]);
+      });
+
+      protrudedMap = {};
+      myProtrudedCardUid = null;
+
+      checkPlayerFinishes();
+      broadcastSyncState('SHUFFLE_COMPLETED', { roll: roll });
+
+      setTimeout(() => {
+        if (isHost) {
+          advanceTurn();
+        }
+      }, 1500);
+    }
+
+    // ==========================================
+    // 画面レンダリング・UI更新
+    // ==========================================
+
+    function broadcastSyncState(reason, extra = {}) {
+      const payload = {
+        type: 'STATE_SYNC',
+        reason: reason,
+        hands: hands,
+        players: players,
+        finishedRankings: finishedRankings,
+        activePlayerId: activePlayerId,
+        targetPlayerId: targetPlayerId,
+        usedShuffle: usedShuffle,
+        protrudedMap: protrudedMap,
+        extra: extra
+      };
+
+      applySyncState(payload);
+      Hitsumabushi.sendGameData(payload);
+    }
+
+    function applySyncState(state) {
+      if (state.players) {
+        players = state.players;
+        setupSeatMapping();
+      }
+      hands = state.hands || {};
+      finishedRankings = state.finishedRankings || [];
+      activePlayerId = state.activePlayerId;
+      targetPlayerId = state.targetPlayerId;
+      usedShuffle = state.usedShuffle || {};
+      if (state.protrudedMap) {
+        protrudedMap = state.protrudedMap;
+      }
+
+      // 引かれた本人の画面で突き出しをリセット（案A）
+      if (state.reason === 'CARD_DRAWN') {
+        if (state.extra && state.extra.fromId === myPlayerId) {
+          myProtrudedCardUid = null;
+        }
+      } else if (state.reason === 'SHUFFLE_COMPLETED') {
+        myProtrudedCardUid = null;
+      }
+
+      if (state.reason === 'TURN_PREPARING') {
+        isPreparingHand = true;
+        isActionLocked = true;
+        startPrepareTimer();
+      } else if (state.reason === 'TURN_START' || state.reason === 'ROUND_START') {
+        clearInterval(prepareInterval);
+        isPreparingHand = false;
+        isActionLocked = false;
+        startTurnTimer();
+      }
+
+      updateSeatsDisplay();
+      updateTurnStatus();
+      updateShuffleButton();
+
+      if (state.extra && state.extra.diceRoll && state.reason === 'START_DICE_ROLL') {
+        showDiceAnimation(state.extra.initiatorId, state.extra.diceRoll, state.extra.survivorsCount);
+      }
+    }
+
+    function updateSeatsDisplay() {
+      playerSeats.forEach((p, seatIdx) => {
+        const infoCard = document.getElementById(`info-${seatIdx}`);
+        const avatar = document.getElementById(`avatar-${seatIdx}`);
+        const nameText = document.getElementById(`name-${seatIdx}`);
+        const countText = document.getElementById(`count-${seatIdx}`);
+        const handWrap = document.getElementById(`hand-${seatIdx}`);
+
+        if (!p) return;
+
+        nameText.textContent = p.name;
+        avatar.textContent = p.isCpu ? '🤖' : (seatIdx === 0 && !isSpectator ? '★' : `P${p.slotIndex + 1}`);
+        avatar.style.color = p.color;
+
+        const cardCount = (hands[p.id] || []).length;
+        countText.textContent = `${cardCount}枚`;
+
+        const rankIdx = finishedRankings.indexOf(p.id);
+        const existingBadge = infoCard.querySelector('.rank-badge');
+        if (rankIdx !== -1) {
+          if (!existingBadge) {
+            const badge = document.createElement('span');
+            badge.className = 'rank-badge';
+            badge.textContent = `${rankIdx + 1}位`;
+            infoCard.appendChild(badge);
+          }
+        } else if (existingBadge) {
+          existingBadge.remove();
+        }
+
+        const isMyTurn = (p.id === activePlayerId);
+        infoCard.classList.toggle('active-turn', isMyTurn);
+
+        const isTarget = (p.id === targetPlayerId);
+        infoCard.classList.toggle('target-selectable', !isSpectator && isTarget && activePlayerId === myPlayerId && !isPreparingHand);
+
+        handWrap.innerHTML = '';
+
+        if (seatIdx === 0) {
+          // 自分の手札（観戦者時は閲覧のみ、プレイヤー時はタップで突き出しブラフ可能）
+          const myCards = hands[p.id] || [];
+          myCards.forEach((c, idx) => {
+            const isProtruded = (c.uid === myProtrudedCardUid);
+            const cardEl = createCardElement(c, isProtruded);
+
+            if (!isSpectator) {
+              cardEl.addEventListener('click', () => {
+                toggleProtrudeCard(c, idx);
+              });
+            }
+            handWrap.appendChild(cardEl);
+          });
+        } else {
+          // 相手の手札（裏面）
+          const oppCount = (hands[p.id] || []).length;
+          const canPickFromThis = (!isSpectator && p.id === targetPlayerId && activePlayerId === myPlayerId && !isGameOver && !isActionLocked && !isPreparingHand);
+          const oppProtrudeIdx = protrudedMap[p.id];
+
+          for (let i = 0; i < oppCount; i++) {
+            const cardEl = document.createElement('div');
+            const isProtruded = (i === oppProtrudeIdx);
+            cardEl.className = 'opponent-card' + (canPickFromThis ? ' selectable' : '') + (isProtruded ? ' protruded' : '');
+
+            if (canPickFromThis) {
+              cardEl.addEventListener('click', () => {
+                onPickOpponentCard(p.id, i);
+              });
+            }
+            handWrap.appendChild(cardEl);
+          }
+        }
+      });
+    }
+
+    // 自分のカードをタップして「突き出し」を切り替える（心理戦ブラフ）
+    function toggleProtrudeCard(card, index) {
+      if (isGameOver || isSpectator || !myPlayerId) return;
+
+      if (myProtrudedCardUid === card.uid) {
+        // すでに突き出ている場合は引っ込める
+        myProtrudedCardUid = null;
+        protrudedMap[myPlayerId] = null;
+      } else {
+        // 別のカードを突き出す
+        myProtrudedCardUid = card.uid;
+        protrudedMap[myPlayerId] = index;
+      }
+
+      updateSeatsDisplay();
+
+      // 他プレイヤーへ突き出し状態をリアルタイム同期
+      Hitsumabushi.sendGameData({
+        type: 'PROTRUDE_SYNC',
+        playerId: myPlayerId,
+        cardIndex: protrudedMap[myPlayerId]
+      });
+    }
+
+    function createCardElement(card, isProtruded = false) {
+      const el = document.createElement('div');
+      el.className = `card ${card.isJoker ? 'joker' : getSuitCss(card.suit)}` + (isProtruded ? ' protruded' : '');
+
+      if (card.isJoker) {
+        el.innerHTML = `
+          <div class="card-corner">
+            <span>★</span>
+            <span class="card-symbol">JOKER</span>
+          </div>
+          <div class="card-center">🃏</div>
+          <div class="card-corner" style="transform: rotate(180deg);">
+            <span>★</span>
+            <span class="card-symbol">JOKER</span>
+          </div>
+        `;
+      } else {
+        const suitInfo = SUITS.find(s => s.id === card.suit) || SUITS[0];
+        el.innerHTML = `
+          <div class="card-corner">
+            <span>${card.rank}</span>
+            <span class="card-symbol">${suitInfo.symbol}</span>
+          </div>
+          <div class="card-center">${suitInfo.symbol}</div>
+          <div class="card-corner" style="transform: rotate(180deg);">
+            <span>${card.rank}</span>
+            <span class="card-symbol">${suitInfo.symbol}</span>
+          </div>
+        `;
+      }
+      return el;
+    }
+
+    function getSuitCss(suitId) {
+      const s = SUITS.find(item => item.id === suitId);
+      return s ? s.css : 'suit-spade';
+    }
+
+    // 相手のカードをタップして引くアクション（排他ロックで2枚引きを徹底防止）
+    function onPickOpponentCard(fromPlayerId, cardIndex) {
+      if (isSpectator || activePlayerId !== myPlayerId || isGameOver || isActionLocked || isPreparingHand) return;
+
+      isActionLocked = true; // 即時排他ロック
+
+      // 全ての相手カードから即座に selectable を外して連打を無効化
+      document.querySelectorAll('.opponent-card.selectable').forEach(el => {
+        el.classList.remove('selectable');
+      });
+
+      if (isHost) {
+        executeDrawCard(myPlayerId, fromPlayerId, cardIndex);
+      } else {
+        Hitsumabushi.sendGameData({
+          type: 'REQ_DRAW_CARD',
+          drawerId: myPlayerId,
+          fromId: fromPlayerId,
+          cardIndex: cardIndex
+        });
+      }
+    }
+
+    function updateTurnStatus() {
+      if (isGameOver) {
+        turnBadge.textContent = '試合終了';
+        centerMsg.textContent = '対戦が終了しました！';
+        return;
+      }
+
+      const activeP = players.find(p => p.id === activePlayerId);
+      const targetP = players.find(p => p.id === targetPlayerId);
+
+      if (!activeP || !targetP) return;
+
+      if (isSpectator) {
+        if (isPreparingHand) {
+          turnBadge.textContent = '👀 観戦中: 手札整理タイム';
+          centerMsg.innerHTML = `⏳ <b>${targetP.name}</b> が手札を整えています...`;
+        } else {
+          turnBadge.textContent = `👀 観戦中: ${activeP.name} の手番`;
+          centerMsg.innerHTML = `👉 <b>${activeP.name}</b> が <b>${targetP.name}</b> の手札から引きます`;
+        }
+        return;
+      }
+
+      if (isPreparingHand) {
+        if (targetPlayerId === myPlayerId) {
+          turnBadge.textContent = '手札整理タイム';
+          centerMsg.innerHTML = '✨ <b>手札を整える時間です</b>（並び替えやカード突き出しが可能）';
+        } else if (activePlayerId === myPlayerId) {
+          turnBadge.textContent = '相手が手札を整理中...';
+          centerMsg.innerHTML = `⏳ <b>${targetP.name}</b> が手札を整えています... 少々お待ちください`;
+        } else {
+          turnBadge.textContent = '手札整理タイム';
+          centerMsg.innerHTML = `⏳ <b>${targetP.name}</b> が手札を整えています...`;
+        }
+        return;
+      }
+
+      if (activePlayerId === myPlayerId) {
+        turnBadge.textContent = 'あなたの手番';
+        centerMsg.innerHTML = `👉 <b>${targetP.name}</b> の手札から1枚引いてください！`;
+      } else {
+        turnBadge.textContent = `${activeP.name} の手番`;
+        centerMsg.textContent = `${activeP.name} が考え中...`;
+      }
+    }
+
+    function updateShuffleButton() {
+      if (isSpectator) {
+        btnShuffle.disabled = true;
+        btnShuffle.innerHTML = '<span class="btn-icon">👀</span><span class="btn-label"> SPECTATING</span>';
+        btnShuffle.title = '観戦中';
+        return;
+      }
+
+      const hasJoker = hands[myPlayerId]?.some(c => c.isJoker);
+      const survivorsCount = players.filter(p => !finishedRankings.includes(p.id)).length;
+      const isMyTurn = (activePlayerId === myPlayerId);
+      const canUse = isMyTurn && !isPreparingHand && hasJoker && !usedShuffle[myPlayerId] && survivorsCount >= 3 && !isGameOver && !isActionLocked;
+
+      btnShuffle.disabled = !canUse;
+
+      if (usedShuffle[myPlayerId]) {
+        btnShuffle.innerHTML = '<span class="btn-icon">✔</span><span class="btn-label"> USED</span>';
+        btnShuffle.title = 'シャッフルは使用済みです';
+      } else if (isPreparingHand) {
+        btnShuffle.innerHTML = '<span class="btn-icon">🎲</span><span class="btn-label"> SHUFFLE</span>';
+        btnShuffle.title = '手札整理中は使用できません（手番開始後に使用可能）';
+      } else if (hasJoker && !isMyTurn) {
+        btnShuffle.innerHTML = '<span class="btn-icon">🎲</span><span class="btn-label"> SHUFFLE</span>';
+        btnShuffle.title = 'あなたの手番中に使用できます';
+      } else if (!hasJoker) {
+        btnShuffle.innerHTML = '<span class="btn-icon">🎲</span><span class="btn-label"> SHUFFLE</span>';
+        btnShuffle.title = 'JOKERを持っている時のみ使用できます';
+      } else {
+        btnShuffle.innerHTML = '<span class="btn-icon">🎲</span><span class="btn-label"> SHUFFLE</span>';
+        btnShuffle.title = 'シャッフルダイスを発動';
+      }
+    }
+
+    function showDiceAnimation(initiatorId, finalRoll, survivorsCount) {
+      diceOverlay.style.display = 'flex';
+      diceTitle.textContent = '🎲 シャッフルチャンス！';
+      diceDesc.textContent = '誰かがシャッフルダイスを発動！ダイスが回転中...';
+      diceBox.classList.add('rolling');
+      diceIcon.textContent = '🎲';
+      diceName.textContent = '...';
+
+      setTimeout(() => {
+        diceBox.classList.remove('rolling');
+
+        if (finalRoll === 'right1') {
+          diceIcon.textContent = '🔄';
+          diceName.textContent = '右1';
+          diceDesc.textContent = '全員の手札が【時計回り】に1つスライド！';
+        } else if (finalRoll === 'left1') {
+          diceIcon.textContent = '🔃';
+          diceName.textContent = '左1';
+          diceDesc.textContent = '全員の手札が【反時計回り】に1つスライド！';
+        } else if (finalRoll === 'opposite') {
+          diceIcon.textContent = '🔀';
+          diceName.textContent = '対面';
+          diceDesc.textContent = '向かい側のプレイヤーと手札を【全交換】！';
+        } else {
+          diceIcon.textContent = '💀';
+          diceName.textContent = 'ドクロ';
+          diceDesc.textContent = 'シャッフル失敗！手札は移動しません！';
+        }
+
+        setTimeout(() => {
+          diceOverlay.style.display = 'none';
+        }, 1400);
+      }, 1600);
+    }
+
+    function endGame() {
+      if (isGameOver) return;
+      isGameOver = true;
+      isActionLocked = true;
+      isPreparingHand = false;
+      clearInterval(turnTimer);
+      clearTimeout(prepareTimer);
+      clearInterval(prepareInterval);
+
+      players.forEach(p => {
+        if (!finishedRankings.includes(p.id)) {
+          finishedRankings.push(p.id);
+        }
+      });
+
+      displayFinalRankings();
+
+      if (isHost && !isSpectator) {
+        const defaultScores = [100, 75, 50, 0];
+        const scoresObj = {};
+        finishedRankings.forEach((pId, idx) => {
+          if (pId) {
+            scoresObj[pId] = defaultScores[idx] !== undefined ? defaultScores[idx] : 0;
+          }
+        });
+
+        Hitsumabushi.sendGameOver({
+          winnerPlayerId: finishedRankings[0],
+          rankings: finishedRankings,
+          isTie: false,
+          scores: scoresObj
+        });
+      }
+    }
+
+    function displayFinalRankings() {
+      rankingList.innerHTML = '';
+
+      finishedRankings.forEach((pId, idx) => {
+        const p = players.find(item => item.id === pId);
+        if (!p) return;
+
+        const row = document.createElement('div');
+        row.className = `ranking-row rank-${idx + 1}`;
+
+        let medal = `${idx + 1}位`;
+        let badgeColor = 'rgba(255,255,255,0.1)';
+        let badgeTextColor = '#cbd5e1';
+
+        if (idx === 0) {
+          medal = '🥇 1位';
+          badgeColor = 'rgba(255, 230, 0, 0.2)';
+          badgeTextColor = '#ffe600';
+        } else if (idx === 1) {
+          medal = '🥈 2位';
+          badgeColor = 'rgba(0, 240, 255, 0.2)';
+          badgeTextColor = '#00f0ff';
+        } else if (idx === 2) {
+          medal = '🥉 3位';
+          badgeColor = 'rgba(57, 255, 20, 0.2)';
+          badgeTextColor = '#39ff14';
+        } else if (idx === 3) {
+          medal = '💀 4位';
+          badgeColor = 'rgba(255, 0, 127, 0.2)';
+          badgeTextColor = '#ff007f';
+        }
+
+        row.innerHTML = `
+          <div class="rank-num">${medal}</div>
+          <div class="rank-name" style="color: ${p.color};">${p.name} ${p.id === myPlayerId ? '(あなた)' : ''}</div>
+          <div class="rank-label" style="background: ${badgeColor}; color: ${badgeTextColor};">
+            ${idx === 0 ? 'WINNER' : (idx === 3 ? 'LAST' : 'FINISH')}
+          </div>
+        `;
+        rankingList.appendChild(row);
+      });
+
+      resultOverlay.style.display = 'flex';
+    }
+
+    // ==========================================
+    // ネットワークデータ受信処理
+    // ==========================================
+
+    function handleGameData(payload, senderId) {
+      if (!payload || !payload.type) return;
+
+      if (payload.type === 'STATE_SYNC') {
+        applySyncState(payload);
+      } else if (payload.type === 'REQ_DRAW_CARD' && isHost) {
+        executeDrawCard(payload.drawerId, payload.fromId, payload.cardIndex);
+      } else if (payload.type === 'REQ_SHUFFLE' && isHost) {
+        if (payload.playerId === activePlayerId) {
+          triggerShuffle(payload.playerId);
+        }
+      } else if (payload.type === 'PROTRUDE_SYNC') {
+        // 突き出し状態の同期（他プレイヤーの画面へ反映）
+        protrudedMap[payload.playerId] = payload.cardIndex;
+        updateSeatsDisplay();
+      }
+    }
+  </script>
+</body>
+</html>
