@@ -5,6 +5,10 @@ name: Deploy
 # So: preview channels only happen for PRs from branches within this repo itself (trusted
 # collaborators); a fork contributor tests locally via `npx hitsumabushi dev` instead, and
 # their game only actually reaches Firebase once a maintainer merges the PR to main.
+#
+# firebase.json configures two sites, and every deploy below updates both: the games site
+# (games/ as-is) and the game guide site (dist-articles/, generated from guide.md by
+# `npm run build:articles`, served at guide.milightpartner.jp, OmoshiroGamePortal#382).
 on:
   pull_request:
     branches: [main]
@@ -28,6 +32,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build:articles
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
@@ -50,6 +59,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # firebase.json's guide site needs its public dir to exist for any deploy.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build:articles
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
@@ -62,6 +77,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build:articles
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
