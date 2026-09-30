@@ -123,6 +123,15 @@ describe('buildArticles', () => {
     expect(page).not.toContain('article:published_time');
   });
 
+  it('credits a team creator by its display name', () => {
+    const result = buildArticles({
+      games: [{ gameId: 'my-game', guideText: guideText(), manifest: { ...manifest, creatorGithub: 'milightpartner' } }],
+      readFileSize: () => 1000,
+      creators: { milightpartner: { displayName: 'ひつまぶし', members: ['alice'] } },
+    });
+    expect(file(result, 'my-game/index.html')).toContain('著者: ひつまぶし');
+  });
+
   it('passes quickRules through as raw Markdown for the portal rules panel', () => {
     const quickRules = 'quickRules: |\n  ## 勝利条件\n  3つ揃えたら勝ち。\n';
     const result = build({ games: [{ gameId: 'my-game', guideText: guideText(undefined, quickRules), manifest }] });

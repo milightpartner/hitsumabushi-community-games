@@ -76,7 +76,22 @@ if (headMalformedPath) {
   process.exit(1);
 }
 
-const result = validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText, readHeadFileSize });
+// Read from the base branch, not the PR: membership must never come from the PR being checked.
+const { value: creators, malformed: creatorsMalformed } = readGitJson(baseRef, 'creators.json');
+if (creatorsMalformed) {
+  console.error(`❌ ${baseRef} の creators.json が正しいJSONとして読み込めません。`);
+  process.exit(1);
+}
+
+const result = validatePr({
+  changedFiles,
+  prAuthor,
+  readBaseManifest,
+  readHeadManifest,
+  readHeadFileText,
+  readHeadFileSize,
+  creators: creators ?? {},
+});
 
 if (!result.ok) {
   console.error('❌ PR検証に失敗しました:\n');

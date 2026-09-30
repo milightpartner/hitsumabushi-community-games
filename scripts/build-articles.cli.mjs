@@ -64,7 +64,14 @@ function readFileSize(p) {
   }
 }
 
-const result = buildArticles({ games: readGames(), readFileSize });
+let creators = {};
+try {
+  creators = JSON.parse(fs.readFileSync('creators.json', 'utf-8'));
+} catch {
+  // no team creators - articles credit the creatorGithub login as-is
+}
+
+const result = buildArticles({ games: readGames(), readFileSize, creators });
 
 fs.rmSync(outDir, { recursive: true, force: true });
 for (const { path: p, content } of result.files) {

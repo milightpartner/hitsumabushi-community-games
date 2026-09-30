@@ -178,6 +178,64 @@ describe('validatePr', () => {
     expect(result.ok).toBe(true);
   });
 
+  describe('team creators (creators.json)', () => {
+    const creators = { milightpartner: { displayName: 'ひつまぶし', members: ['8720soichiro'] } };
+    const team = (overrides) => validManifest({ creatorGithub: 'milightpartner', ...overrides });
+
+    it('accepts a new team game submitted by a member', () => {
+      const result = validatePr({
+        changedFiles: ['games/my-game/manifest.json'],
+        prAuthor: '8720soichiro',
+        readBaseManifest: () => null,
+        readHeadManifest: () => team(),
+        creators,
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it('accepts an update to a team game from a member', () => {
+      const result = validatePr({
+        changedFiles: ['games/my-game/index.html'],
+        prAuthor: '8720soichiro',
+        readBaseManifest: () => team(),
+        readHeadManifest: () => team(),
+        creators,
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it('rejects a non-member claiming or editing a team game', () => {
+      const claim = validatePr({
+        changedFiles: ['games/my-game/manifest.json'],
+        prAuthor: 'mallory',
+        readBaseManifest: () => null,
+        readHeadManifest: () => team(),
+        creators,
+      });
+      expect(claim.ok).toBe(false);
+      const edit = validatePr({
+        changedFiles: ['games/my-game/index.html'],
+        prAuthor: 'mallory',
+        readBaseManifest: () => team(),
+        readHeadManifest: () => team(),
+        creators,
+      });
+      expect(edit.ok).toBe(false);
+    });
+
+    it('rejects a PR that edits creators.json itself', () => {
+      const result = validatePr({
+        changedFiles: ['games/my-game/index.html', 'creators.json'],
+        prAuthor: 'mallory',
+        readBaseManifest: () => validManifest({ creatorGithub: 'mallory' }),
+        readHeadManifest: () => validManifest({ creatorGithub: 'mallory' }),
+        creators,
+      });
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes('creators.json'))).toBe(true);
+    });
+  });
+
   describe('guide.md', () => {
     const validGuide = '---\ngameId: my-game\ntitle: 遊び方\ndescription: 説明です。\n---\n\n# 遊び方\n';
     const withGuide = (guideText, changedFiles = ['games/my-game/index.html']) =>
