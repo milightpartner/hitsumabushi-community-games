@@ -11,6 +11,7 @@ import matter from 'gray-matter';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toHast } from 'mdast-util-to-hast';
 import { toHtml } from 'hast-util-to-html';
+import { creatorDisplayName } from './creators.mjs';
 import { validateGuide, guideImagePath } from './validate-guide.mjs';
 
 export const SITE = {
@@ -58,6 +59,7 @@ export function renderMarkdown(markdown, { headingShift = 0 } = {}) {
  *   every game directory that has a guide.md. publishedAt is when guide.md was first merged
  *   (ISO 8601), or null if unknown.
  * @param {(path: string) => number | null} [params.readFileSize] - passed through to validateGuide.
+ * @param {import('./creators.mjs').Creators} [params.creators] - team creators, for the author credit.
  * @param {object} [params.site] - overrides for SITE (tests).
  * @returns {{
  *   files: { path: string, content: string }[],
@@ -66,7 +68,7 @@ export function renderMarkdown(markdown, { headingShift = 0 } = {}) {
  *   skipped: { gameId: string, reasons: string[] }[],
  * }} files/copies paths are relative to the output directory (copies' `from` is repo-relative).
  */
-export function buildArticles({ games, readFileSize, site: siteOverrides = {} }) {
+export function buildArticles({ games, readFileSize, creators = {}, site: siteOverrides = {} }) {
   const site = { ...SITE, ...siteOverrides };
   const files = [];
   const copies = [{ from: 'site/article.css', to: 'article.css' }];
@@ -108,7 +110,7 @@ export function buildArticles({ games, readFileSize, site: siteOverrides = {} })
         article,
         bodyHtml: renderMarkdown(content, { headingShift: 1 }),
         gameTitle: manifest?.title ?? gameId,
-        author: manifest?.creatorGithub ?? null,
+        author: manifest?.creatorGithub ? creatorDisplayName(manifest.creatorGithub, creators) : null,
       }),
     });
     articles.push(article);

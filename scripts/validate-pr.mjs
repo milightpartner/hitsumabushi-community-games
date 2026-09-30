@@ -1,6 +1,7 @@
 // Pure validation logic for a community-games PR, kept separate from any I/O so it can be
 // unit-tested without a real git checkout or GitHub API call. See validate-pr.cli.mjs for the
 // actual CI entry point that gathers changedFiles/readBaseManifest/readHeadManifest for real.
+import { canActFor } from './creators.mjs';
 import { validateGuide } from './validate-guide.mjs';
 
 const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -20,9 +21,11 @@ const RESULT_TYPES = ['single_winner', 'ranked', 'score'];
  *   file's raw text content from the PR's HEAD, or null if it doesn't exist / isn't text.
  * @param {(path: string) => number | null} [params.readHeadFileSize] - size in bytes of a file at
  *   the PR's HEAD, or null if it doesn't exist. Used for guide.md's image checks.
+ * @param {import('./creators.mjs').Creators} [params.creators] - team creators (creators.json as
+ *   of the base branch, so a PR can't grant itself membership).
  * @returns {{ ok: boolean, errors: string[], gameId: string | null }}
  */
-export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText, readHeadFileSize }) {
+export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText, readHeadFileSize, creators = {} }) {
   const errors = [];
 
   if (!changedFiles || changedFiles.length === 0) {
@@ -81,10 +84,11 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
   }
 
   // --- ownership check: prevents editing someone else's game directory ---
+  // creatorGithub is either the submitter's own login or a team from creators.json (creators.mjs).
   const baseManifest = readBaseManifest(gameId);
   if (baseManifest) {
     // Existing game: ownership was fixed at creation time and can't be reassigned by an edit PR.
-    if (baseManifest.creatorGithub && baseManifest.creatorGithub.toLowerCase() !== prAuthor.toLowerCase()) {
+    if (baseManifest.creatorGithub && !canActFor(baseManifest.creatorGithub, prAuthor, creators)) {
       errors.push(
         `games/${gameId}/ は "${baseManifest.creatorGithub}" が作成したゲームです。別のGitHubユーザー("${prAuthor}")からは変更できません。`,
       );
@@ -96,7 +100,7 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
     // New game: the submitter is free to claim it, but must claim it as themselves.
     if (typeof headManifest.creatorGithub !== 'string' || !headManifest.creatorGithub.trim()) {
       errors.push('新規ゲームの manifest.json には creatorGithub (あなたのGitHubユーザー名) が必須です。');
-    } else if (headManifest.creatorGithub.toLowerCase() !== prAuthor.toLowerCase()) {
+    } else if (!canActFor(headManifest.creatorGithub, prAuthor, creators)) {
       errors.push(`manifest.json の creatorGithub ("${headManifest.creatorGithub}") はPR作成者("${prAuthor}")と一致している必要があります。`);
     }
   }
