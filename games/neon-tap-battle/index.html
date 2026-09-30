@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ネオン・タップバトル</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overscroll-behavior: none; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0a0b10;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      transition: background-color 0.3s;
+    }
+    body.transparent {
+      background-color: transparent !important;
+    }
+    .game-card {
+      background: rgba(22, 26, 42, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      padding: 30px;
+      border-radius: 20px;
+      text-align: center;
+      box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+      max-width: 400px;
+      width: 90%;
+    }
+    .score-display {
+      font-size: 3.5rem;
+      font-weight: 900;
+      color: #00f0ff;
+      text-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+      margin: 20px 0;
+    }
+    .tap-btn {
+      background: linear-gradient(135deg, #00f0ff, #ff007f);
+      border: none;
+      color: #fff;
+      font-size: 1.2rem;
+      font-weight: 800;
+      padding: 16px 32px;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);
+      transition: transform 0.1s;
+    }
+    .tap-btn:active {
+      transform: scale(0.95);
+    }
+    .tap-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .host-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: rgba(0, 240, 255, 0.15);
+      color: #00f0ff;
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-card" id="gameCard">
+    <h2 id="playerTitle">対戦中...</h2>
+    <div class="score-display" id="scoreDisplay">0</div>
+    <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">
+      誰よりも速くタップしてスコア 10 を目指せ！
+    </p>
+    <button class="tap-btn" id="tapBtn">タップで連打！</button>
+  </div>
+
+  <!--
+    Hitsumabushi SDK (IIFE build) を読み込む。
+    window.Hitsumabushi グローバルとして利用可能になる。
+  -->
+  <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script>
+  <script>
+    var myScore = 0;
+    var isGameOver = false;
+    var playerScores = {};
+    var isSpectator = false;
+    var localPlayerId = null;
+    var currentConfig = null;
+
+    function updateScoreUI() {
+      var scoreDisplay = document.getElementById('scoreDisplay');
+      if (!scoreDisplay) return;
+
+      if (isSpectator) {
+        var p1 = currentConfig?.players?.find(function (p) { return p.id === 'p1'; });
+        var p2 = currentConfig?.players?.find(function (p) { return p.id === 'p2'; });
+        var p1Name = (p1 && p1.name) || 'P1';
+        var p2Name = (p2 && p2.name) || 'P2';
+        var s1 = playerScores.p1 || 0;
+        var s2 = playerScores.p2 || 0;
+        scoreDisplay.innerHTML = '<span style="color:#00f0ff">' + s1 + '</span> <span style="font-size:2rem;color:#64748b">-</span> <span style="color:#ff007f">' + s2 + '</span>';
+      } else {
+        scoreDisplay.textContent = myScore;
+      }
+    }
+
+    // 1. SDK 初期化 — GAME_READY を Portal Host へ通知し、INIT_GAME を待つ
+    Hitsumabushi.init({
+      onStartMatch: function (config) {
+        currentConfig = config;
+        myScore = 0;
+        isGameOver = false;
+        playerScores = {};
+        (config.players || []).forEach(function (p) {
+          playerScores[p.id] = 0;
+        });
+
+        isSpectator = Hitsumabushi.isSpectator();
+        localPlayerId = config.localPlayerId || null;
+
+        var tapBtn = document.getElementById('tapBtn');
+        var subText = document.querySelector('.game-card p');
+
+        if (tapBtn) {
+          if (isSpectator) {
+            tapBtn.disabled = true;
+            tapBtn.style.pointerEvents = 'none';
+            tapBtn.textContent = 'タップで連打！ (観戦中)';
+          } else {
+            tapBtn.disabled = false;
+            tapBtn.style.pointerEvents = 'auto';
+            tapBtn.textContent = 'タップで連打！';
+          }
+        }
+
+        if (subText) {
+          subText.textContent = isSpectator
+            ? 'プレイヤーたちの熱い連打バトルを観戦中 (10点先取)...'
+            : '誰よりも速くタップしてスコア 10 を目指せ！';
+        }
+
+        // プレイヤー名の表示
+        if (isSpectator) {
+          var p1 = config.players && config.players.find(function (p) { return p.id === 'p1'; });
+          var p2 = config.players && config.players.find(function (p) { return p.id === 'p2'; });
+          var p1Name = (p1 && p1.name) || 'P1';
+          var p2Name = (p2 && p2.name) || 'P2';
+          var spectatorTitle = '👀 ' + p1Name + ' vs ' + p2Name;
+          if (Hitsumabushi.isRoomHost()) {
+            spectatorTitle += '<span class="host-badge">HOST</span>';
+          }
+          document.getElementById('playerTitle').innerHTML = spectatorTitle;
+        } else {
+          var me = config.players && config.players.find(function (p) { return p.id === config.localPlayerId; });
+          var displayName = (me && me.name) || 'あなた';
+
+          var titleHTML = displayName + ' の連打バトル';
+          if (Hitsumabushi.isGameMaster()) {
+            titleHTML += '<span class="host-badge">HOST</span>';
+          }
+          document.getElementById('playerTitle').innerHTML = titleHTML;
+        }
+
+        updateScoreUI();
+
+        // OBS 透過モード初期適用
+        if (config.isObsMode) {
+          document.body.classList.add('transparent');
+        }
+      },
+
+      onObsModeChange: function (isObsMode) {
+        if (isObsMode) {
+          document.body.classList.add('transparent');
+        } else {
+          document.body.classList.remove('transparent');
+        }
+      },
+
+      onGameData: function (payload) {
+        if (isGameOver || !payload) return;
+        if (payload.type === 'TAP_UPDATE' && payload.playerId) {
+          playerScores[payload.playerId] = payload.score;
+          updateScoreUI();
+
+          // 観戦者画面で勝敗が確定した場合の演出
+          if (payload.score >= 10 && !isGameOver) {
+            isGameOver = true;
+            var winner = currentConfig?.players?.find(function (p) { return p.id === payload.playerId; });
+            var winnerName = (winner && winner.name) || payload.playerId;
+            var tapBtn = document.getElementById('tapBtn');
+            if (tapBtn) {
+              tapBtn.disabled = true;
+              tapBtn.textContent = '🎉 ' + winnerName + ' の勝利！';
+            }
+          }
+        }
+      }
+    });
+
+    // 2. タップイベント
+    document.getElementById('tapBtn').addEventListener('click', function () {
+      if (isGameOver || isSpectator) return;
+
+      myScore++;
+      var config = Hitsumabushi.getConfig();
+      var localId = (config && config.localPlayerId) ? config.localPlayerId : 'p1';
+      playerScores[localId] = myScore;
+      updateScoreUI();
+
+      var scores = {};
+      scores[localId] = myScore;
+
+      // スコア更新を Portal Host へ送信
+      Hitsumabushi.sendScoreUpdate(scores);
+
+      // リアルタイムタップ中継を相手・観戦者へブロードキャスト
+      Hitsumabushi.sendGameData({
+        type: 'TAP_UPDATE',
+        playerId: localId,
+        score: myScore
+      });
+
+      // スコア 10 で勝利
+      if (myScore >= 10) {
+        isGameOver = true;
+        document.getElementById('tapBtn').disabled = true;
+        document.getElementById('tapBtn').textContent = '勝利！🎉';
+
+        var rankings = [localId];
+        var finalScores = {};
+        finalScores[localId] = myScore;
+
+        // 対戦終了を Portal Host へ送信
+        Hitsumabushi.sendGameOver({
+          winnerPlayerId: localId,
+          rankings: rankings,
+          isTie: false,
+          scores: finalScores
+        });
+      }
+    });
+  </script>
+</body>
+</html>
