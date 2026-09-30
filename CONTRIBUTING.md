@@ -31,7 +31,20 @@
 
   `index.html`のimport mapが`/__hitsumabushi_dev__/sdk.js`を指したままではいけません。これは`npx hitsumabushi dev`(ローカル開発ハーネス)専用のパスで、本番では404になりゲームが一切反応しなくなります。SDKの実体をリポジトリにコピーする(vendoring)運用も採っていません。`hitsumabushi-game-starter`をそのまま使っていれば、通常は意識する必要はありません。
 
-これらを満たさないPRは、CIチェック(`Validate PR`)が失敗し、マージできません。
+### 解説記事 (`guide.md`) を付ける場合
+
+`games/<gameId>/guide.md` は任意です。置いた場合は、ゲームの解説記事として公開され、`quickRules` はゲーム画面のルールパネルに表示されます。記事はミライトのドメインで公開されるため、次のルールをCIがチェックします。
+
+- 先頭の `---` で囲まれた部分(frontmatter)に書けるのは `gameId` / `title` / `description` / `quickRules` だけです。
+  - `gameId` はディレクトリ名と同じにしてください。`title`(60文字以内)と `description`(120文字以内)は必須です。
+  - `slug` / `author` / `category` / `publishedAt` などは指定できません。記事のURLは `<gameId>-guide` に固定され、作者名は `manifest.json` の `creatorGithub` から決まります。
+- `quickRules` の見出しは `##`(常に表示)と `###`(タップで開閉)だけが使えます。
+- 本文と `quickRules` に**HTMLタグは書けません**(`<!-- -->` のコメントは可)。Markdownの記法だけを使ってください。コードブロック内のタグは問題ありません。
+- リンクは `http://` か `https://` で始まるURL、またはページ内リンク(`#見出し`)のみです。
+- 画像は `games/<gameId>/` 内に置き、`guide.md` からの相対パスで指定してください(例: `![盤面](images/board.png)`)。形式は png / jpg / jpeg / gif / webp、1枚500KBまでです。外部URLの画像は使えません。
+- `guide.md` 自体は50KBまでです。
+
+これらを満たさないPRは、CIチェック(`Validate PR`)が失敗し、マージできません。`guide.md` はそのPRで変更していなくても、ゲームのディレクトリに存在する限り毎回チェックされます。
 
 ## 4. マージされたら
 

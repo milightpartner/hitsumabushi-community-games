@@ -171,9 +171,38 @@ describe('validatePr', () => {
       readHeadFileText: (path) =>
         path === 'games/my-game/index.html'
           ? '<script type="importmap">{"imports":{"@milightpartner/hitsumabushi-sdk":"./vendor/hitsumabushi-sdk.js"}}</script>'
-          : 'class HitsumabushiSDK {}',
+          : path === 'games/my-game/vendor/hitsumabushi-sdk.js'
+            ? 'class HitsumabushiSDK {}'
+            : null,
     });
     expect(result.ok).toBe(true);
+  });
+
+  describe('guide.md', () => {
+    const validGuide = '---\ngameId: my-game\ntitle: 遊び方\ndescription: 説明です。\n---\n\n# 遊び方\n';
+    const withGuide = (guideText, changedFiles = ['games/my-game/index.html']) =>
+      validatePr({
+        changedFiles,
+        prAuthor: 'alice',
+        readBaseManifest: () => validManifest(),
+        readHeadManifest: () => validManifest(),
+        readHeadFileText: (path) => (path === 'games/my-game/guide.md' ? guideText : null),
+        readHeadFileSize: () => null,
+      });
+
+    it('accepts a game without guide.md', () => {
+      expect(withGuide(null).ok).toBe(true);
+    });
+
+    it('accepts a valid guide.md', () => {
+      expect(withGuide(validGuide, ['games/my-game/guide.md']).ok).toBe(true);
+    });
+
+    it('rejects an invalid guide.md even when the PR did not change it', () => {
+      const result = withGuide(`${validGuide}\n<script>alert(1)</script>\n`);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes('HTMLタグは書けません'))).toBe(true);
+    });
   });
 
   it('rejects an empty diff', () => {
