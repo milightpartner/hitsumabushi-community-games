@@ -6,8 +6,8 @@ const guideText = (body = '# 遊び方\n\n本文です。\n', extraFrontmatter =
 
 const manifest = { gameId: 'my-game', title: 'マイゲーム', creatorGithub: 'alice' };
 
-const build = ({ games, isPublished = () => true, readFileSize = () => 1000 } = {}) =>
-  buildArticles({ games: games ?? [{ gameId: 'my-game', guideText: guideText(), manifest }], isPublished, readFileSize });
+const build = ({ games, readFileSize = () => 1000 } = {}) =>
+  buildArticles({ games: games ?? [{ gameId: 'my-game', guideText: guideText(), manifest }], readFileSize });
 
 const file = (result, path) => result.files.find((f) => f.path === path)?.content;
 
@@ -34,36 +34,29 @@ describe('renderMarkdown', () => {
 });
 
 describe('buildArticles', () => {
-  it('builds the article page, index, JSON, sitemap and robots.txt', () => {
+  it('builds the guide page, index, guides.json, sitemap and robots.txt', () => {
     const result = build();
     expect(result.articles).toHaveLength(1);
     expect(result.skipped).toEqual([]);
 
     const page = file(result, 'my-game/index.html');
     expect(page).toContain('<title>マイゲームの遊び方 | ひつまぶし</title>');
-    expect(page).toContain('<link rel="canonical" href="https://article.milightpartner.jp/my-game/">');
+    expect(page).toContain('<link rel="canonical" href="https://guide.milightpartner.jp/my-game/">');
     expect(page).toContain('href="https://milightpartner.jp/?create=my-game"');
     expect(page).toContain('adsbygoogle.js?client=ca-pub-');
     expect(page).toContain('https://github.com/alice');
 
     expect(file(result, 'index.html')).toContain('href="/my-game/"');
-    expect(file(result, 'sitemap.xml')).toContain('<loc>https://article.milightpartner.jp/my-game/</loc>');
-    expect(file(result, 'robots.txt')).toContain('Sitemap: https://article.milightpartner.jp/sitemap.xml');
+    expect(file(result, 'sitemap.xml')).toContain('<loc>https://guide.milightpartner.jp/my-game/</loc>');
+    expect(file(result, 'robots.txt')).toContain('Sitemap: https://guide.milightpartner.jp/sitemap.xml');
 
-    const json = JSON.parse(file(result, 'articles.json'));
-    expect(json.articles[0]).toMatchObject({
+    const json = JSON.parse(file(result, 'guides.json'));
+    expect(json.guides[0]).toMatchObject({
       gameId: 'my-game',
       title: 'マイゲームの遊び方',
-      url: 'https://article.milightpartner.jp/my-game/',
+      url: 'https://guide.milightpartner.jp/my-game/',
       quickRules: null,
     });
-  });
-
-  it('skips games the portal catalog does not list as active', () => {
-    const result = build({ isPublished: () => false });
-    expect(result.articles).toEqual([]);
-    expect(result.files.find((f) => f.path === 'my-game/index.html')).toBeUndefined();
-    expect(result.skipped[0].reasons[0]).toMatch(/active/);
   });
 
   it('skips an invalid guide but still builds the others', () => {

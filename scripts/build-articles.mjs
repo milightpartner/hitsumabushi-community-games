@@ -1,5 +1,8 @@
-// Builds the explainer-article site (article.milightpartner.jp, OmoshiroGamePortal#382) from
-// games/<gameId>/guide.md. Pure logic only - build-articles.cli.mjs does the file/network I/O.
+// Builds the game guide site (guide.milightpartner.jp, OmoshiroGamePortal#382) from
+// games/<gameId>/guide.md. Pure logic only - build-articles.cli.mjs does the file I/O.
+//
+// Every guide merged to main is published; whether the portal links to it is decided entirely on
+// the portal side (its catalog), so this build deliberately has no dependency on portal state.
 //
 // The article site is served under a Milight domain, so it must only ever contain HTML this
 // script generates: Markdown is rendered without passing raw HTML through, and only the images a
@@ -11,7 +14,7 @@ import { toHtml } from 'hast-util-to-html';
 import { validateGuide, guideImagePath } from './validate-guide.mjs';
 
 export const SITE = {
-  articleBaseUrl: 'https://article.milightpartner.jp',
+  articleBaseUrl: 'https://guide.milightpartner.jp',
   portalUrl: 'https://milightpartner.jp',
   siteName: 'ひつまぶし',
   // Same site-wide auto-ads tag as the portal's index.html.
@@ -53,9 +56,6 @@ export function renderMarkdown(markdown, { headingShift = 0 } = {}) {
  * @param {object} params
  * @param {{ gameId: string, guideText: string, manifest: object | null }[]} params.games - every
  *   game directory that has a guide.md.
- * @param {(gameId: string) => boolean} params.isPublished - whether the portal catalog currently
- *   lists this game as playable from this repository (active, url pointing here). Articles only exist for games people can actually start from the
- *   CTA; the portal decides that, not this repository.
  * @param {(path: string) => number | null} [params.readFileSize] - passed through to validateGuide.
  * @param {object} [params.site] - overrides for SITE (tests).
  * @returns {{
@@ -65,7 +65,7 @@ export function renderMarkdown(markdown, { headingShift = 0 } = {}) {
  *   skipped: { gameId: string, reasons: string[] }[],
  * }} files/copies paths are relative to the output directory (copies' `from` is repo-relative).
  */
-export function buildArticles({ games, isPublished, readFileSize, site: siteOverrides = {} }) {
+export function buildArticles({ games, readFileSize, site: siteOverrides = {} }) {
   const site = { ...SITE, ...siteOverrides };
   const files = [];
   const copies = [{ from: 'site/article.css', to: 'article.css' }];
@@ -73,10 +73,6 @@ export function buildArticles({ games, isPublished, readFileSize, site: siteOver
   const skipped = [];
 
   for (const { gameId, guideText, manifest } of [...games].sort((a, b) => a.gameId.localeCompare(b.gameId))) {
-    if (!isPublished(gameId)) {
-      skipped.push({ gameId, reasons: ['ポータルのカタログで、このリポジトリのゲームとして公開中(active)になっていません'] });
-      continue;
-    }
     // One broken guide must not take the whole site down - skip it and report.
     const errors = validateGuide({ gameId, text: guideText, readFileSize });
     if (errors.length > 0) {
@@ -119,7 +115,7 @@ export function buildArticles({ games, isPublished, readFileSize, site: siteOver
   }
 
   files.push({ path: 'index.html', content: renderIndexPage({ site, articles }) });
-  files.push({ path: 'articles.json', content: `${JSON.stringify({ articles }, null, 2)}\n` });
+  files.push({ path: 'guides.json', content: `${JSON.stringify({ guides: articles }, null, 2)}\n` });
   files.push({ path: 'sitemap.xml', content: renderSitemap({ site, articles }) });
   files.push({ path: 'robots.txt', content: `User-agent: *\nAllow: /\n\nSitemap: ${site.articleBaseUrl}/sitemap.xml\n` });
 
