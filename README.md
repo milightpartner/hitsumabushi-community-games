@@ -32,5 +32,5 @@ npm run validate-pr   # 実際のPR検証をローカルで再現する場合
 
 ## 関連リポジトリ
 
-- [hitsumabushi-game-starter](https://github.com/milightpartner/hitsumabushi-game-starter) — ゲーム開発用スターターテンプレート
+- [Hitsumabushi SDK のドキュメント](https://milightpartner.jp/creator) — ゲームの作り方(`hitsumabushi init` でゲーム一式を用意できます)
 - [OmoshiroGamePortal](https://github.com/milightpartner/OmoshiroGamePortal) — ポータル本体
