@@ -7,8 +7,8 @@ name: Deploy
 # their game only actually reaches Firebase once a maintainer merges the PR to main.
 #
 # firebase.json configures two sites, and every deploy below updates both: the games site
-# (games/ as-is) and the game guide site (dist-articles/, generated from guide.md by
-# `npm run build:articles`, served at guide.milightpartner.jp, OmoshiroGamePortal#382).
+# (games/ as-is) and the game guide site guide.milightpartner.jp (dist-guides/, built from
+# games/*/guide.md by the portal's shared SSG engine hitsudoc - see .github/actions/build-guides).
 on:
   pull_request:
     branches: [main]
@@ -18,6 +18,8 @@ on:
 
 permissions:
   contents: read
+  # Installing @milightpartner/hitsudoc from GitHub Packages (.github/actions/build-guides).
+  packages: read
   pull-requests: write
   # action-hosting-deploy reports its own progress via a custom Check Run (POST
   # /check-runs), which needs `checks: write` specifically - confirmed from the actual
@@ -32,13 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # build:articles reads guide publish dates from git history
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run build:articles
+      - uses: ./.github/actions/build-guides
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
@@ -61,14 +57,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # build:articles reads guide publish dates from git history
-      # firebase.json's guide site needs its public dir to exist for any deploy.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run build:articles
+      # firebase.json's guide site needs its public dir (dist-guides/) to exist for any deploy.
+      - uses: ./.github/actions/build-guides
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
@@ -88,13 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # build:articles reads guide publish dates from git history
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run build:articles
+      - uses: ./.github/actions/build-guides
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'

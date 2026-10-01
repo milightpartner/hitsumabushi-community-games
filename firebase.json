@@ -13,8 +13,9 @@
     },
     {
       "site": "hitu-mabusi-guides",
-      "public": "dist-articles",
+      "public": "dist-guides",
       "trailingSlash": true,
+      "rewrites": [{ "source": "/sitemap.xml", "destination": "/sitemap-index.xml" }],
       "headers": [
         {
           "source": "**",

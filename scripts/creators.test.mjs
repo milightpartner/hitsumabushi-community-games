@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canActFor, creatorDisplayName } from './creators.mjs';
+import { canActFor } from './creators.mjs';
 
 const creators = { milightpartner: { displayName: 'ひつまぶし', members: ['8720soichiro', 'gami8'] } };
 
@@ -13,11 +13,5 @@ describe('creators', () => {
     expect(canActFor('milightpartner', '8720soichiro', creators)).toBe(true);
     expect(canActFor('MilightPartner', 'GAMI8', creators)).toBe(true);
     expect(canActFor('milightpartner', 'mallory', creators)).toBe(false);
-  });
-
-  it('credits the team display name, or the login itself', () => {
-    expect(creatorDisplayName('milightpartner', creators)).toBe('ひつまぶし');
-    expect(creatorDisplayName('alice', creators)).toBe('alice');
-    expect(creatorDisplayName('alice', undefined)).toBe('alice');
   });
 });
