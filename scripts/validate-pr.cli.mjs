@@ -5,7 +5,7 @@
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import Ajv from 'ajv';
-import { validatePr } from './validate-pr.mjs';
+import { validatePr, validateRepository } from './validate-pr.mjs';
 
 // The SDK's JSON Schema is authored and versioned in OmoshiroGamePortal (a private repo), so it
 // can't be pulled in as an npm dependency here without exposing a registry token to fork PRs -
@@ -108,6 +108,35 @@ if (creatorsMalformed) {
 }
 
 const validateManifestSchema = await loadManifestSchemaValidator();
+
+// Maintainer infrastructure PRs (issue #5). games/-only / one-game-per-PR exist so untrusted
+// submissions can be accepted safely; they would otherwise block every scripts/, workflow or
+// package.json change from a non-admin collaborator. GitHub sets author_association itself
+// (OWNER / MEMBER = milightpartner org member / COLLABORATOR = invited to this repo), so a fork
+// contributor can't claim it. Such PRs touching anything outside games/ are checked by
+// re-validating every game in the repo instead (validateRepository).
+const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+const association = process.env.PR_AUTHOR_ASSOCIATION ?? '';
+if (TRUSTED_ASSOCIATIONS.includes(association) && changedFiles.some((f) => !f.startsWith('games/'))) {
+  const gameIds = fs
+    .readdirSync('games', { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
+  for (const gameId of gameIds) {
+    if (readJson(`games/${gameId}/manifest.json`).malformed) {
+      console.error(`❌ games/${gameId}/manifest.json が正しいJSONとして読み込めません。構文を確認してください。`);
+      process.exit(1);
+    }
+  }
+  const repo = validateRepository({ gameIds, readHeadManifest, validateManifestSchema, readHeadFileText, readHeadFileSize });
+  if (!repo.ok) {
+    console.error(`❌ メンテナーによるインフラ変更(${association})として検証しましたが、既存のゲームが検査に通りません:\n`);
+    for (const e of repo.errors) console.error(`  - ${e}`);
+    process.exit(1);
+  }
+  console.log(`✅ メンテナーによるインフラ変更(${association})として検証しました。games/ 限定・1PR1ゲームのルールは適用せず、全${gameIds.length}ゲームが検査に通ることを確認しました。`);
+  process.exit(0);
+}
 
 const result = validatePr({
   changedFiles,
