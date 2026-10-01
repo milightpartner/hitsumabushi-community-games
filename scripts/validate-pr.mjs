@@ -1,12 +1,20 @@
 // Pure validation logic for a community-games PR, kept separate from any I/O so it can be
 // unit-tested without a real git checkout or GitHub API call. See validate-pr.cli.mjs for the
-// actual CI entry point that gathers changedFiles/readBaseManifest/readHeadManifest for real.
+// actual CI entry point that gathers changedFiles/readBaseManifest/readHeadManifest/
+// validateManifestSchema for real.
+//
+// manifest.json's *shape* (required fields, enums, version format, additionalProperties, ...) is
+// not re-implemented here - that duplication is what let this file and the SDK's JSON Schema
+// (packages/hitsumabushi-sdk/schemas/manifest.schema.json in OmoshiroGamePortal, published at
+// https://milightpartner.jp/schemas/game-manifest-1.json) drift apart (OmoshiroGamePortal#249).
+// It is delegated to the injected `validateManifestSchema`. What stays here is business logic
+// that is specific to *this* repo and has no business being in a generic manifest schema: the
+// games/<gameId>/ directory-naming convention, creatorGithub ownership rules, and the
+// dev-harness-path footgun check, plus guide.md (validate-guide.mjs).
 import { canActFor } from './creators.mjs';
 import { validateGuide } from './validate-guide.mjs';
 
 const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const PLAYERS_TYPES = ['fixed', 'variable'];
-const RESULT_TYPES = ['single_winner', 'ranked', 'score'];
 
 /**
  * @param {object} params
@@ -17,6 +25,9 @@ const RESULT_TYPES = ['single_winner', 'ranked', 'score'];
  *   the game doesn't exist there yet (brand new submission).
  * @param {(gameId: string) => object | null} params.readHeadManifest - same, but from the PR's
  *   HEAD (the content the PR is proposing). null if the PR deletes the manifest entirely.
+ * @param {(manifest: object) => string[]} params.validateManifestSchema - validates a manifest
+ *   against the SDK's JSON Schema (the machine source of truth for its shape) and returns a list
+ *   of human-readable violation strings, or an empty array if it conforms.
  * @param {(path: string) => string | null} params.readHeadFileText - reads an arbitrary changed
  *   file's raw text content from the PR's HEAD, or null if it doesn't exist / isn't text.
  * @param {(path: string) => number | null} [params.readHeadFileSize] - size in bytes of a file at
@@ -25,7 +36,7 @@ const RESULT_TYPES = ['single_winner', 'ranked', 'score'];
  *   of the base branch, so a PR can't grant itself membership).
  * @returns {{ ok: boolean, errors: string[], gameId: string | null }}
  */
-export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, readHeadFileText, readHeadFileSize, creators = {} }) {
+export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadManifest, validateManifestSchema, readHeadFileText, readHeadFileSize, creators = {} }) {
   const errors = [];
 
   if (!changedFiles || changedFiles.length === 0) {
@@ -64,23 +75,22 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
     return { ok: errors.length === 0, errors, gameId };
   }
 
-  // --- manifest.json schema ---
+  // --- manifest.json schema (SDK's JSON Schema is the source of truth - see module doc above) ---
   if (headManifest.gameId !== gameId) {
     errors.push(`manifest.json の gameId ("${headManifest.gameId}") がディレクトリ名 ("${gameId}") と一致しません。`);
   }
-  if (typeof headManifest.title !== 'string' || !headManifest.title.trim()) {
-    errors.push('manifest.json の title が必須です。');
+  const schemaErrors = validateManifestSchema(headManifest);
+  if (schemaErrors.length > 0) {
+    errors.push(
+      `manifest.json がSDKのJSON Schema (https://milightpartner.jp/schemas/game-manifest-1.json) に違反しています:\n  - ${schemaErrors.join('\n  - ')}`,
+    );
   }
-  const players = headManifest.players || {};
-  if (typeof players.min !== 'number' || typeof players.max !== 'number' || players.min < 1 || players.max < players.min) {
-    errors.push('manifest.json の players.min/max が不正です。');
-  }
-  if (!PLAYERS_TYPES.includes(players.type)) {
-    errors.push(`manifest.json の players.type は ${PLAYERS_TYPES.join(' / ')} のいずれかである必要があります。`);
-  }
-  const resultModel = headManifest.resultModel || {};
-  if (!RESULT_TYPES.includes(resultModel.type)) {
-    errors.push(`manifest.json の resultModel.type は ${RESULT_TYPES.join(' / ')} のいずれかである必要があります。`);
+  // max < min is a cross-field constraint plain JSON Schema can't express, so the SDK schema
+  // doesn't check it either (see manifestSchema.test.js in OmoshiroGamePortal) - checked here
+  // instead of being left unverified.
+  const players = headManifest.players;
+  if (players && typeof players.min === 'number' && typeof players.max === 'number' && players.max < players.min) {
+    errors.push('manifest.json の players.max は players.min 以上である必要があります。');
   }
 
   // --- ownership check: prevents editing someone else's game directory ---

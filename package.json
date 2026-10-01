@@ -9,6 +9,7 @@
     "build:articles": "node scripts/build-articles.cli.mjs"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
     "gray-matter": "^4.0.3",
     "hast-util-to-html": "^9.0.5",
     "mdast-util-from-markdown": "^2.0.3",
