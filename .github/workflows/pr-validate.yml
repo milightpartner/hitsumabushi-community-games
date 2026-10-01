@@ -36,5 +36,6 @@ jobs:
       - name: Validate PR contents (path restrictions, single-game diff, manifest schema, ownership, guide.md)
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
         run: npm run validate-pr

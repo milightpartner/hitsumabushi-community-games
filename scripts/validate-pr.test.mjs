@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePr as validatePrReal } from './validate-pr.mjs';
+import { validatePr as validatePrReal, validateRepository } from './validate-pr.mjs';
 
 const validManifest = (overrides = {}) => ({
   gameId: 'my-game',
@@ -304,5 +304,43 @@ describe('validatePr', () => {
       readHeadManifest: () => null,
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('validateRepository (maintainer infrastructure PRs)', () => {
+  const manifests = {
+    'game-a': validManifest({ gameId: 'game-a' }),
+    'game-b': validManifest({ gameId: 'game-b', creatorGithub: 'milightpartner' }),
+  };
+  const run = ({ gameIds = Object.keys(manifests), readHeadManifest = (id) => manifests[id] ?? null, guides = {} } = {}) =>
+    validateRepository({
+      gameIds,
+      readHeadManifest,
+      validateManifestSchema: fakeValidateManifestSchema,
+      readHeadFileText: (path) => guides[path] ?? null,
+      readHeadFileSize: () => null,
+    });
+
+  it('passes when every game in the repository is valid, regardless of owner', () => {
+    expect(run()).toEqual({ ok: true, errors: [] });
+  });
+
+  it('fails when an existing game no longer passes the manifest checks', () => {
+    const result = run({ readHeadManifest: (id) => (id === 'game-b' ? validManifest({ gameId: 'game-b', resultModel: {} }) : manifests[id]) });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('games/game-b/manifest.json') && e.includes('resultModel.type'))).toBe(true);
+  });
+
+  it('fails on a missing manifest or a gameId that does not match its directory', () => {
+    const result = run({ gameIds: ['game-a', 'game-c'], readHeadManifest: (id) => (id === 'game-a' ? validManifest({ gameId: 'other' }) : null) });
+    expect(result.errors.some((e) => e.includes('ディレクトリ名 ("game-a")'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('games/game-c/manifest.json が見つかりません'))).toBe(true);
+  });
+
+  it('also checks every existing guide.md', () => {
+    const guides = { 'games/game-a/guide.md': '---\ngameId: game-a\ntitle: 遊び方\ndescription: 説明です。\n---\n\n<script>x</script>\n' };
+    const result = run({ guides });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('HTMLタグは書けません'))).toBe(true);
   });
 });

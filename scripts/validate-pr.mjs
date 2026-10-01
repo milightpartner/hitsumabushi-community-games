@@ -76,22 +76,7 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
   }
 
   // --- manifest.json schema (SDK's JSON Schema is the source of truth - see module doc above) ---
-  if (headManifest.gameId !== gameId) {
-    errors.push(`manifest.json の gameId ("${headManifest.gameId}") がディレクトリ名 ("${gameId}") と一致しません。`);
-  }
-  const schemaErrors = validateManifestSchema(headManifest);
-  if (schemaErrors.length > 0) {
-    errors.push(
-      `manifest.json がSDKのJSON Schema (https://milightpartner.jp/schemas/game-manifest-1.json) に違反しています:\n  - ${schemaErrors.join('\n  - ')}`,
-    );
-  }
-  // max < min is a cross-field constraint plain JSON Schema can't express, so the SDK schema
-  // doesn't check it either (see manifestSchema.test.js in OmoshiroGamePortal) - checked here
-  // instead of being left unverified.
-  const players = headManifest.players;
-  if (players && typeof players.min === 'number' && typeof players.max === 'number' && players.max < players.min) {
-    errors.push('manifest.json の players.max は players.min 以上である必要があります。');
-  }
+  errors.push(...checkManifest(gameId, headManifest, validateManifestSchema));
 
   // --- ownership check: prevents editing someone else's game directory ---
   // creatorGithub is either the submitter's own login or a team from creators.json (creators.mjs).
@@ -145,4 +130,66 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
   }
 
   return { ok: errors.length === 0, errors, gameId };
+}
+
+/**
+ * Checks for a single game's manifest.json that don't depend on who submitted it: directory/gameId
+ * agreement, the SDK's JSON Schema, and the players cross-field rule.
+ */
+function checkManifest(gameId, manifest, validateManifestSchema) {
+  const errors = [];
+  if (manifest.gameId !== gameId) {
+    errors.push(`games/${gameId}/manifest.json の gameId ("${manifest.gameId}") がディレクトリ名 ("${gameId}") と一致しません。`);
+  }
+  const schemaErrors = validateManifestSchema(manifest);
+  if (schemaErrors.length > 0) {
+    errors.push(
+      `games/${gameId}/manifest.json がSDKのJSON Schema (https://milightpartner.jp/schemas/game-manifest-1.json) に違反しています:\n  - ${schemaErrors.join('\n  - ')}`,
+    );
+  }
+  // max < min is a cross-field constraint plain JSON Schema can't express, so the SDK schema
+  // doesn't check it either (see manifestSchema.test.js in OmoshiroGamePortal) - checked here
+  // instead of being left unverified.
+  const players = manifest.players;
+  if (players && typeof players.min === 'number' && typeof players.max === 'number' && players.max < players.min) {
+    errors.push(`games/${gameId}/manifest.json の players.max は players.min 以上である必要があります。`);
+  }
+  return errors;
+}
+
+/**
+ * Validation for a maintainer's infrastructure PR (OmoshiroGamePortal-side scripts, workflows,
+ * package.json, ... - anything outside games/). The submission-only rules (games/ only, one game
+ * per PR, ownership) don't apply to those; instead every game currently in the repository must
+ * still pass the per-game checks, so an infra change can't silently break existing games.
+ *
+ * Whether a PR qualifies is decided by the CLI from GitHub's author_association, which the PR
+ * author can't forge - see validate-pr.cli.mjs.
+ *
+ * @param {object} params
+ * @param {string[]} params.gameIds - every games/<gameId>/ directory at the PR's HEAD.
+ * @param {(gameId: string) => object | null} params.readHeadManifest
+ * @param {(manifest: object) => string[]} params.validateManifestSchema
+ * @param {(path: string) => string | null} params.readHeadFileText
+ * @param {(path: string) => number | null} [params.readHeadFileSize]
+ * @returns {{ ok: boolean, errors: string[] }}
+ */
+export function validateRepository({ gameIds, readHeadManifest, validateManifestSchema, readHeadFileText, readHeadFileSize }) {
+  const errors = [];
+  for (const gameId of gameIds) {
+    if (!ID_RE.test(gameId)) {
+      errors.push(`ゲームID "${gameId}" は半角英数小文字とハイフンのみ(kebab-case)である必要があります。`);
+    }
+    const manifest = readHeadManifest(gameId);
+    if (!manifest) {
+      errors.push(`games/${gameId}/manifest.json が見つかりません。`);
+      continue;
+    }
+    errors.push(...checkManifest(gameId, manifest, validateManifestSchema));
+    const guideText = readHeadFileText(`games/${gameId}/guide.md`);
+    if (guideText !== null && guideText !== undefined) {
+      errors.push(...validateGuide({ gameId, text: guideText, readFileSize: readHeadFileSize }));
+    }
+  }
+  return { ok: errors.length === 0, errors };
 }
