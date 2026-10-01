@@ -4,12 +4,18 @@
 
 ## 1. ゲームを作る
 
-[`hitsumabushi-game-starter`](https://github.com/milightpartner/hitsumabushi-game-starter) を「Use this template」で使い、AIエディタと対話しながらゲームを実装してください。手元での動作確認は `npm run dev` (`hitsumabushi dev`) でできます。
+ゲームは**自分のリポジトリ**で開発します(このリポジトリは提出専用です)。新しいリポジトリで Hitsumabushi SDK の `init` を実行すると、ゲーム一式が用意されます。
+
+```bash
+npx -p @milightpartner/hitsumabushi-sdk hitsumabushi init
+```
+
+`games/<gameId>/` にゲーム本体(`index.html`)・`manifest.json`・解説記事の雛形(`guide.md`)・テストが、`.claude/skills/` にAI開発用のスキルが作られます。Claude Code でリポジトリを開いてゲームのルールを伝えれば実装が進みます。手元での動作確認は `npm run dev`、ポータルの要件を満たしているかの検査は `npm run verify` でできます。SDKのインストールに必要な設定は [インストールガイド](https://milightpartner.jp/creator/installation) を参照してください。
 
 ## 2. このリポジトリにForkでPRを送る
 
 1. このリポジトリをFork
-2. `games/<あなたのゲームID>/` ディレクトリを作り、ゲームのファイル一式(`index.html`、`manifest.json`、必要なら画像・音声アセット)を配置
+2. 自分のリポジトリの `games/<あなたのゲームID>/` を、ディレクトリごとそのままコピーする(`index.html`、`manifest.json`、必要なら `guide.md` や画像・音声アセット)
 3. `manifest.json` に `creatorGithub` フィールドを追加し、**あなたのGitHubユーザー名**を設定する(例: `"creatorGithub": "your-github-username"`)
 4. PRを送る
 
@@ -29,7 +35,7 @@
   </script>
   ```
 
-  `index.html`のimport mapが`/__hitsumabushi_dev__/sdk.js`を指したままではいけません。これは`npx hitsumabushi dev`(ローカル開発ハーネス)専用のパスで、本番では404になりゲームが一切反応しなくなります。SDKの実体をリポジトリにコピーする(vendoring)運用も採っていません。`hitsumabushi-game-starter`をそのまま使っていれば、通常は意識する必要はありません。
+  `index.html`のimport mapが`/__hitsumabushi_dev__/sdk.js`を指したままではいけません。これは`npx hitsumabushi dev`(ローカル開発ハーネス)専用のパスで、本番では404になりゲームが一切反応しなくなります。SDKの実体をリポジトリにコピーする(vendoring)運用も採っていません。`hitsumabushi init` が作るテンプレートをそのまま使っていれば、通常は意識する必要はありません。
 
 ### 解説記事 (`guide.md`) を付ける場合
 
