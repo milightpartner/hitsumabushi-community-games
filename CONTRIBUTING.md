@@ -10,12 +10,12 @@
 npx -p @milightpartner/hitsumabushi-sdk hitsumabushi init
 ```
 
-`games/<gameId>/` にゲーム本体(`index.html`)・`manifest.json`・解説記事の雛形(`guide.md`)・テストが、`.claude/skills/` にAI開発用のスキルが作られます。Claude Code でリポジトリを開いてゲームのルールを伝えれば実装が進みます。手元での動作確認は `npm run dev`、ポータルの要件を満たしているかの検査は `npm run verify` でできます。SDKのインストールに必要な設定は [インストールガイド](https://milightpartner.jp/creator/installation) を参照してください。
+`games/<gameId>/` にゲーム本体(`index.html`)・`manifest.json`・解説記事(`guide.md`)の雛形・テストが、`.claude/skills/` にAI開発用のスキルが作られます。Claude Code でリポジトリを開いてゲームのルールを伝えれば実装が進みます。手元での動作確認は `npm run dev`、ポータルの要件を満たしているかの検査は `npm run verify` でできます。SDKのインストールに必要な設定は [インストールガイド](https://milightpartner.jp/creator/installation) を参照してください。
 
 ## 2. このリポジトリにForkでPRを送る
 
 1. このリポジトリをFork
-2. 自分のリポジトリの `games/<あなたのゲームID>/` を、ディレクトリごとそのままコピーする(`index.html`、`manifest.json`、必要なら `guide.md` や画像・音声アセット)
+2. 自分のリポジトリの `games/<あなたのゲームID>/` を、ディレクトリごとそのままコピーする(`index.html`、`manifest.json`、`guide.md`、必要なら画像・音声アセット)
 3. `manifest.json` に `creatorGithub` フィールドを追加し、**あなたのGitHubユーザー名**を設定する(例: `"creatorGithub": "your-github-username"`)
 4. PRを送る
 
@@ -37,13 +37,14 @@ npx -p @milightpartner/hitsumabushi-sdk hitsumabushi init
 
   `index.html`のimport mapが`/__hitsumabushi_dev__/sdk.js`を指したままではいけません。これは`npx hitsumabushi dev`(ローカル開発ハーネス)専用のパスで、本番では404になりゲームが一切反応しなくなります。SDKの実体をリポジトリにコピーする(vendoring)運用も採っていません。`hitsumabushi init` が作るテンプレートをそのまま使っていれば、通常は意識する必要はありません。
 
-### 解説記事 (`guide.md`) を付ける場合
+### 解説記事 (`guide.md`)
 
-`games/<gameId>/guide.md` は任意です。置いた場合は、ゲームの解説記事として公開され、`quickRules` はゲーム画面のルールパネルに表示されます。記事はミライトのドメインで公開されるため、次のルールをCIがチェックします。
+`games/<gameId>/guide.md` は**必須**です(ゲームのルールを伝えるもので、ルールの無いゲームは公開しません)。`hitsumabushi init` が作る雛形を元に書いてください。ゲームの解説記事として公開され、`quickRules` はゲーム画面のルールパネルに表示されます。記事はミライトのドメインで公開されるため、次のルールをCIがチェックします。
 
 - **本文の最初の見出し(`# ...`)が記事のタイトルになります。** 本文に `#` の見出しを1つだけ、最初の見出しとして書いてください(60文字以内)。2つ目以降の見出しは `##` 以下にします。
 - 先頭の `---` で囲まれた部分(frontmatter)に書けるのは `gameId` / `title` / `description` / `quickRules` / `tags` だけです。
-  - `gameId` はディレクトリ名と同じにしてください。`description`(120文字以内)は必須です。
+  - `description`(120文字以内)は必須です。`quickRules` と `tags` は任意です。
+  - `gameId` は任意です(ゲームIDはディレクトリ名で決まります)。書く場合はディレクトリ名と同じにしてください。
   - `title` は任意です。書く場合は本文の `#` の見出しと同じにしてください(食い違うとCIが止めます)。
   - `slug` / `author` / `category` / `publishedAt` などは指定できません。記事のURLはゲームIDから自動で決まります(`https://guide.milightpartner.jp/<gameId>/`)。
   - `tags` は任意です(例: `tags: ["攻略", "2人対戦"]`、10個まで・1つ20文字以内)。
@@ -53,7 +54,7 @@ npx -p @milightpartner/hitsumabushi-sdk hitsumabushi init
 - 画像は `games/<gameId>/` 内に置き、`guide.md` からの相対パスで指定してください(例: `![盤面](images/board.png)`)。形式は png / jpg / jpeg / gif / webp、1枚500KBまでです。外部URLの画像は使えません。
 - `guide.md` 自体は50KBまでです。
 
-これらを満たさないPRは、CIチェック(`Validate PR`)が失敗し、マージできません。`guide.md` はそのPRで変更していなくても、ゲームのディレクトリに存在する限り毎回チェックされます。
+これらを満たさないPRは、CIチェック(`Validate PR`)が失敗し、マージできません。`guide.md` はそのPRで変更していなくても、ゲームに関するPRでは毎回チェックされます(無い場合もエラーになります)。
 
 ## 4. マージされたら
 

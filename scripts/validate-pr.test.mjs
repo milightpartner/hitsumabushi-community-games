@@ -206,7 +206,9 @@ describe('validatePr', () => {
           ? '<script type="importmap">{"imports":{"@milightpartner/hitsumabushi-sdk":"./vendor/hitsumabushi-sdk.js"}}</script>'
           : path === 'games/my-game/vendor/hitsumabushi-sdk.js'
             ? 'class HitsumabushiSDK {}'
-            : null,
+            : path === 'games/my-game/guide.md'
+              ? '---\ndescription: 説明です。\n---\n\n# 遊び方\n'
+              : null,
     });
     expect(result.ok).toBe(true);
   });
@@ -281,8 +283,42 @@ describe('validatePr', () => {
         readHeadFileSize: () => null,
       });
 
-    it('accepts a game without guide.md', () => {
-      expect(withGuide(null).ok).toBe(true);
+    it('rejects a game without guide.md (required to publish)', () => {
+      const result = withGuide(null);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes('games/my-game/guide.md が必要です'))).toBe(true);
+    });
+
+    it('accepts the guide.md that `hitsumabushi init` generates, unchanged', () => {
+      // Copy of guideFile() in OmoshiroGamePortal packages/hitsumabushi-sdk/src/commands/scaffold-files.js
+      // (as of #418) for gameId "my-game" / title "My Game". If init's template changes, update this.
+      const initTemplate = [
+        '---',
+        'description: My Gameのルールと遊び方を紹介します。',
+        'quickRules: |',
+        '  ## 勝利条件',
+        '  ゲーム画面のルールパネルに常に表示される、いちばん大事なルールを短く書きます。',
+        '',
+        '  ### 遊び方',
+        '  タップで開く補足のルールを書きます。',
+        '---',
+        '',
+        '# My Gameの遊び方',
+        '',
+        '<!--',
+        '  この guide.md はゲームのルールを伝える解説記事です。公開には必須です。',
+        '-->',
+        '',
+        '## My Gameとは',
+        '',
+        'ゲームの概要を書きます。',
+        '',
+        '## 遊び方',
+        '',
+        '## 上達のコツ',
+        '',
+      ].join('\n');
+      expect(withGuide(initTemplate, ['games/my-game/guide.md'])).toMatchObject({ ok: true, errors: [] });
     });
 
     it('accepts a valid guide.md', () => {
@@ -312,12 +348,16 @@ describe('validateRepository (maintainer infrastructure PRs)', () => {
     'game-a': validManifest({ gameId: 'game-a' }),
     'game-b': validManifest({ gameId: 'game-b', creatorGithub: 'milightpartner' }),
   };
+  const validGuides = {
+    'games/game-a/guide.md': '---\ndescription: 説明です。\n---\n\n# 遊び方\n',
+    'games/game-b/guide.md': '---\ndescription: 説明です。\n---\n\n# 遊び方\n',
+  };
   const run = ({ gameIds = Object.keys(manifests), readHeadManifest = (id) => manifests[id] ?? null, guides = {} } = {}) =>
     validateRepository({
       gameIds,
       readHeadManifest,
       validateManifestSchema: fakeValidateManifestSchema,
-      readHeadFileText: (path) => guides[path] ?? null,
+      readHeadFileText: (path) => ({ ...validGuides, ...guides })[path] ?? null,
       readHeadFileSize: () => null,
     });
 
@@ -335,6 +375,17 @@ describe('validateRepository (maintainer infrastructure PRs)', () => {
     const result = run({ gameIds: ['game-a', 'game-c'], readHeadManifest: (id) => (id === 'game-a' ? validManifest({ gameId: 'other' }) : null) });
     expect(result.errors.some((e) => e.includes('ディレクトリ名 ("game-a")'))).toBe(true);
     expect(result.errors.some((e) => e.includes('games/game-c/manifest.json が見つかりません'))).toBe(true);
+  });
+
+  it('fails when a game has no guide.md', () => {
+    const result = validateRepository({
+      gameIds: ['game-a'],
+      readHeadManifest: (id) => manifests[id],
+      validateManifestSchema: fakeValidateManifestSchema,
+      readHeadFileText: () => null,
+      readHeadFileSize: () => null,
+    });
+    expect(result.errors.some((e) => e.includes('games/game-a/guide.md が必要です'))).toBe(true);
   });
 
   it('also checks every existing guide.md', () => {

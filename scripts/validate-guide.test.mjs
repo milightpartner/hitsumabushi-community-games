@@ -49,6 +49,10 @@ describe('validateGuide', () => {
       expect(errors[0]).toMatch(/YAMLとして読み込めません/);
     });
 
+    it('accepts a guide without gameId (the directory name is the source of truth)', () => {
+      expect(run(guide({ frontmatter: 'description: 説明です。' }))).toEqual([]);
+    });
+
     it('rejects a gameId that does not match the directory', () => {
       const frontmatter = 'gameId: other-game\ntitle: 遊び方\ndescription: 説明です。';
       expect(run(guide({ frontmatter })).some((e) => e.includes('"other-game"'))).toBe(true);
