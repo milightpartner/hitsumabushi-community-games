@@ -28,7 +28,7 @@ runs:
         # Same site-wide AdSense client as the portal's index.html.
         DOCS_ADSENSE_CLIENT_ID: ca-pub-3165831236819189
       run: |
-        npm install --no-save --no-package-lock @milightpartner/hitsudoc@0.2.1
+        npm install --no-save --no-package-lock @milightpartner/hitsudoc@0.2.2
         npx hitsudoc build --site="$DOCS_SITE_URL"
         # hitsudoc writes its output inside its own package directory.
         rm -rf dist-guides
