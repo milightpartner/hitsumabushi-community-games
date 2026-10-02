@@ -65,7 +65,7 @@ export function validateGuide({ gameId, text, readFileSize }) {
 
   const data = parsed.data;
   if (!data || typeof data !== 'object' || Array.isArray(data) || Object.keys(data).length === 0) {
-    errors.push(`${file} の先頭に --- で囲まれた frontmatter (gameId / title / description) が必要です。`);
+    errors.push(`${file} の先頭に --- で囲まれた frontmatter (description と、必要なら quickRules / tags) が必要です。`);
     return errors;
   }
 
@@ -80,8 +80,10 @@ export function validateGuide({ gameId, text, readFileSize }) {
     );
   }
 
-  if (data.gameId !== gameId) {
-    errors.push(`${file} の gameId ("${data.gameId ?? ''}") がディレクトリ名 ("${gameId}") と一致しません。`);
+  // gameId is optional: the source of truth is manifest.json / the directory name, so `init`'s
+  // template no longer writes it (OmoshiroGamePortal#418). If present it must still agree.
+  if (data.gameId !== undefined && data.gameId !== gameId) {
+    errors.push(`${file} の gameId ("${data.gameId}") がディレクトリ名 ("${gameId}") と一致しません。不要なので削除しても構いません。`);
   }
   checkRequiredText(errors, file, data, 'description', GUIDE_LIMITS.maxDescriptionLength);
   if (data.title !== undefined && typeof data.title !== 'string') {

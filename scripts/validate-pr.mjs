@@ -119,14 +119,11 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
     }
   }
 
-  // --- guide.md (optional explainer article) ---
-  // Checked whenever it exists at HEAD, not only when this PR changed it, so the game is never
-  // deployed next to a guide that no longer passes the current rules.
+  // --- guide.md (the game's rules / explainer article - required to publish) ---
+  // Checked on every PR touching the game, not only when this PR changed it, so the game is never
+  // deployed without a guide or next to one that no longer passes the current rules.
   if (typeof readHeadFileText === 'function') {
-    const guideText = readHeadFileText(`games/${gameId}/guide.md`);
-    if (guideText !== null && guideText !== undefined) {
-      errors.push(...validateGuide({ gameId, text: guideText, readFileSize: readHeadFileSize }));
-    }
+    errors.push(...checkGuideFile(gameId, readHeadFileText, readHeadFileSize));
   }
 
   return { ok: errors.length === 0, errors, gameId };
@@ -186,10 +183,22 @@ export function validateRepository({ gameIds, readHeadManifest, validateManifest
       continue;
     }
     errors.push(...checkManifest(gameId, manifest, validateManifestSchema));
-    const guideText = readHeadFileText(`games/${gameId}/guide.md`);
-    if (guideText !== null && guideText !== undefined) {
-      errors.push(...validateGuide({ gameId, text: guideText, readFileSize: readHeadFileSize }));
-    }
+    errors.push(...checkGuideFile(gameId, readHeadFileText, readHeadFileSize));
   }
   return { ok: errors.length === 0, errors };
+}
+
+/**
+ * guide.md is required: a game without its rules isn't published (OmoshiroGamePortal#418 made it
+ * part of what `hitsumabushi init` generates).
+ */
+function checkGuideFile(gameId, readHeadFileText, readHeadFileSize) {
+  const guideText = readHeadFileText(`games/${gameId}/guide.md`);
+  if (guideText === null || guideText === undefined) {
+    return [
+      `games/${gameId}/guide.md が必要です(ゲームのルールを伝える解説記事。公開に必須です)。`
+      + ' `hitsumabushi init` が作る雛形を元に書いてください。',
+    ];
+  }
+  return validateGuide({ gameId, text: guideText, readFileSize: readHeadFileSize });
 }
