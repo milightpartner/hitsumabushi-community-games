@@ -1,0 +1,35 @@
+name: Build guide site
+description: >
+  Builds guide.milightpartner.jp from games/*/guide.md with the portal's shared SSG engine
+  (@milightpartner/hitsudoc, hitsumabushi-community-games#21) into dist-guides/.
+
+# hitsudoc is a restricted GitHub Packages package. This repository has read access to it via the
+# package's "Manage Actions access" setting, so the workflow's own GITHUB_TOKEN can install it -
+# the calling job needs `permissions: packages: read`.
+#
+# It is installed here rather than declared in package.json on purpose: pr-validate.yml runs
+# `npm install` for fork PRs too, and a fork's token can't read the restricted package.
+#
+# The version is pinned so a new hitsudoc release can't change the live site unnoticed; bump it
+# deliberately after checking the new version's output.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        registry-url: https://npm.pkg.github.com
+        scope: '@milightpartner'
+    - shell: bash
+      env:
+        NODE_AUTH_TOKEN: ${{ github.token }}
+        # canonical / og:url come from DOCS_SITE_URL, not from --site.
+        DOCS_SITE_URL: https://guide.milightpartner.jp
+        # Same site-wide AdSense client as the portal's index.html.
+        DOCS_ADSENSE_CLIENT_ID: ca-pub-3165831236819189
+      run: |
+        npm install --no-save --no-package-lock @milightpartner/hitsudoc@0.2.2
+        npx hitsudoc build --site="$DOCS_SITE_URL"
+        # hitsudoc writes its output inside its own package directory.
+        rm -rf dist-guides
+        cp -r node_modules/@milightpartner/hitsudoc/dist dist-guides

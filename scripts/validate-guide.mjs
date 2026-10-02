@@ -83,8 +83,10 @@ export function validateGuide({ gameId, text, readFileSize }) {
   if (data.gameId !== gameId) {
     errors.push(`${file} の gameId ("${data.gameId ?? ''}") がディレクトリ名 ("${gameId}") と一致しません。`);
   }
-  checkRequiredText(errors, file, data, 'title', GUIDE_LIMITS.maxTitleLength);
   checkRequiredText(errors, file, data, 'description', GUIDE_LIMITS.maxDescriptionLength);
+  if (data.title !== undefined && typeof data.title !== 'string') {
+    errors.push(`${file} の title は文字列で指定してください(不要なら項目ごと削除してください)。`);
+  }
 
   // --- tags (shown as #tag chips on the page) ---
   if (data.tags !== undefined) {
@@ -120,9 +122,52 @@ export function validateGuide({ gameId, text, readFileSize }) {
 
   // --- article body ---
   const bodyLineOffset = countLines(text.slice(0, text.length - parsed.content.length)) - 1;
-  checkMarkdownContent(errors, file, fromMarkdown(parsed.content), { gameId, readFileSize, lineOffset: bodyLineOffset });
+  const body = fromMarkdown(parsed.content);
+  checkTitleHeading(errors, file, body, data.title, bodyLineOffset);
+  checkMarkdownContent(errors, file, body, { gameId, readFileSize, lineOffset: bodyLineOffset });
 
   return errors;
+}
+
+/**
+ * The guide site's engine (@milightpartner/hitsudoc) takes the article title from the body's H1,
+ * not from frontmatter (hitsumabushi-community-games#21). So the body needs exactly one H1, as its
+ * first heading. A frontmatter `title`, if still present, must agree with it so the two can't
+ * silently diverge.
+ */
+function checkTitleHeading(errors, file, body, frontmatterTitle, lineOffset) {
+  const headings = [];
+  visit(body, (node) => {
+    if (node.type === 'heading') headings.push(node);
+  });
+  const h1s = headings.filter((h) => h.depth === 1);
+  const at = (node) => (node.position ? ` (${node.position.start.line + lineOffset}行目)` : '');
+
+  if (h1s.length === 0) {
+    errors.push(`${file} の本文に、記事のタイトルになる見出し(# ...)が必要です。本文の最初の見出しとして1つ書いてください。`);
+    return;
+  }
+  if (h1s.length > 1) {
+    errors.push(`${file} の見出し(# ...)は1つだけにしてください(記事のタイトルになります)。2つ目以降は ## にしてください${at(h1s[1])}。`);
+  }
+  if (headings[0] !== h1s[0]) {
+    errors.push(`${file} の記事のタイトルになる見出し(# ...)は、本文の最初の見出しにしてください${at(h1s[0])}。`);
+  }
+
+  const title = plainText(h1s[0]).trim();
+  if (!title) {
+    errors.push(`${file} のタイトルの見出し(# ...)が空です${at(h1s[0])}。`);
+    return;
+  }
+  const length = [...title].length;
+  if (length > GUIDE_LIMITS.maxTitleLength) {
+    errors.push(`${file} のタイトルの見出しが長すぎます(${length}文字)。${GUIDE_LIMITS.maxTitleLength}文字以内にしてください${at(h1s[0])}。`);
+  }
+  if (typeof frontmatterTitle === 'string' && frontmatterTitle.trim() !== title) {
+    errors.push(
+      `${file} の frontmatter の title ("${truncate(frontmatterTitle.trim())}") が本文の見出し ("${truncate(title)}") と一致しません。記事のタイトルは本文の見出しが使われるので、title は見出しと同じにするか削除してください。`,
+    );
+  }
 }
 
 function checkRequiredText(errors, file, data, key, maxLength) {

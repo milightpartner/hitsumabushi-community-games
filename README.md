@@ -4,11 +4,12 @@
 
 - ゲームは `games/<gameId>/` 配下に1つずつ配置されます。
 - `main` へのマージで自動的に `https://hitu-mabusi-community.web.app/<gameId>/` へデプロイされます。
+- 各ゲームの解説記事(`games/<gameId>/guide.md`)は、ポータル共通のSSGエンジン [`@milightpartner/hitsudoc`](https://github.com/milightpartner/OmoshiroGamePortal/tree/main/packages/hitsumabushi-docs) でビルドされ、`https://guide.milightpartner.jp/<gameId>/` に公開されます(設定は [`.github/docs-mounts.json`](./.github/docs-mounts.json) と [`.github/actions/build-guides`](./.github/actions/build-guides/action.yml))。
 - PRは自動検証されます(`games/`以外への変更禁止、1PR1ゲーム、`manifest.json`のスキーマ・所有者チェック)。詳細は [`scripts/validate-pr.mjs`](./scripts/validate-pr.mjs) を参照。
 
 ## チームでの投稿 (`creators.json`)
 
-`manifest.json` の `creatorGithub` には、通常は投稿者自身のGitHubユーザー名を書きます。代わりに [`creators.json`](./creators.json) に定義したチーム名(例: ミライト公式ゲームの `milightpartner`)を書くと、そのチームの `members` の誰でもそのゲームを投稿・更新でき、解説記事の著者は `displayName`(例: 「ひつまぶし」)で表示されます。
+`manifest.json` の `creatorGithub` には、通常は投稿者自身のGitHubユーザー名を書きます。代わりに [`creators.json`](./creators.json) に定義したチーム名(例: ミライト公式ゲームの `milightpartner`)を書くと、そのチームの `members` の誰でもそのゲームを投稿・更新できます(`displayName` は解説記事でチームを表示するための名前です。今の解説サイトのエンジンは著者を表示していません)。
 
 `creators.json` は `games/` の外にあるため、メンテナーしか変更できません(PRの検証はマージ先ブランチの `creators.json` を使います)。
 

@@ -41,10 +41,12 @@ npx -p @milightpartner/hitsumabushi-sdk hitsumabushi init
 
 `games/<gameId>/guide.md` は任意です。置いた場合は、ゲームの解説記事として公開され、`quickRules` はゲーム画面のルールパネルに表示されます。記事はミライトのドメインで公開されるため、次のルールをCIがチェックします。
 
+- **本文の最初の見出し(`# ...`)が記事のタイトルになります。** 本文に `#` の見出しを1つだけ、最初の見出しとして書いてください(60文字以内)。2つ目以降の見出しは `##` 以下にします。
 - 先頭の `---` で囲まれた部分(frontmatter)に書けるのは `gameId` / `title` / `description` / `quickRules` / `tags` だけです。
-  - `gameId` はディレクトリ名と同じにしてください。`title`(60文字以内)と `description`(120文字以内)は必須です。
-  - `slug` / `author` / `category` / `publishedAt` などは指定できません。記事のURLはゲームIDから自動で決まり(`https://guide.milightpartner.jp/<gameId>/`)、作者名は `manifest.json` の `creatorGithub` から、公開日は `guide.md` が最初にマージされた日から自動で決まります。
-  - `tags` は任意です。記事ページに `#タグ` として表示されます(例: `tags: ["攻略", "2人対戦"]`、10個まで・1つ20文字以内)。
+  - `gameId` はディレクトリ名と同じにしてください。`description`(120文字以内)は必須です。
+  - `title` は任意です。書く場合は本文の `#` の見出しと同じにしてください(食い違うとCIが止めます)。
+  - `slug` / `author` / `category` / `publishedAt` などは指定できません。記事のURLはゲームIDから自動で決まります(`https://guide.milightpartner.jp/<gameId>/`)。
+  - `tags` は任意です(例: `tags: ["攻略", "2人対戦"]`、10個まで・1つ20文字以内)。
 - `quickRules` の見出しは `##`(常に表示)と `###`(タップで開閉)だけが使えます。
 - 本文と `quickRules` に**HTMLタグは書けません**(`<!-- -->` のコメントは可)。Markdownの記法だけを使ってください。コードブロック内のタグは問題ありません。
 - リンクは `http://` か `https://` で始まるURL、またはページ内リンク(`#見出し`)のみです。

@@ -5,15 +5,12 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "validate-pr": "node scripts/validate-pr.cli.mjs",
-    "build:articles": "node scripts/build-articles.cli.mjs"
+    "validate-pr": "node scripts/validate-pr.cli.mjs"
   },
   "devDependencies": {
     "ajv": "^8.20.0",
     "gray-matter": "^4.0.3",
-    "hast-util-to-html": "^9.0.5",
     "mdast-util-from-markdown": "^2.0.3",
-    "mdast-util-to-hast": "^13.2.1",
     "vitest": "^2.1.9"
   }
 }

@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { validateGuide, GUIDE_LIMITS } from './validate-guide.mjs';
 
-const guide = ({ frontmatter, body = '# 遊び方\n\n本文です。\n' } = {}) => {
+// The body gets an H1 (the article title) matching the frontmatter title, unless the test
+// supplies its own H1.
+const guide = ({ frontmatter, body = '本文です。\n' } = {}) => {
   const fm = frontmatter ?? [
     'gameId: my-game',
     'title: マイゲームの遊び方',
@@ -13,7 +15,8 @@ const guide = ({ frontmatter, body = '# 遊び方\n\n本文です。\n' } = {}) 
     '  ### 詳しいルール',
     '  - 交互に置く。',
   ].join('\n');
-  return `---\n${fm}\n---\n\n${body}`;
+  const heading = /^# /m.test(body) ? '' : `# ${fm.match(/^title: (.+)$/m)?.[1] ?? '遊び方'}\n\n`;
+  return `---\n${fm}\n---\n\n${heading}${body}`;
 };
 
 const run = (text, readFileSize) => validateGuide({ gameId: 'my-game', text, readFileSize });
@@ -24,7 +27,7 @@ describe('validateGuide', () => {
   });
 
   it('accepts the starter template shape, including its HTML comment', () => {
-    const body = '<!--\n  この guide.md は任意です。\n-->\n\n# マイゲームとは\n\n説明。\n';
+    const body = '<!--\n  この guide.md は任意です。\n-->\n\n# マイゲームの遊び方\n\n## マイゲームとは\n\n説明。\n';
     expect(run(guide({ body }))).toEqual([]);
   });
 
@@ -51,10 +54,10 @@ describe('validateGuide', () => {
       expect(run(guide({ frontmatter })).some((e) => e.includes('"other-game"'))).toBe(true);
     });
 
-    it('requires title and description', () => {
+    it('requires description (title is optional: the article title comes from the H1)', () => {
       const errors = run(guide({ frontmatter: 'gameId: my-game' }));
-      expect(errors.some((e) => e.includes('title が必須'))).toBe(true);
-      expect(errors.some((e) => e.includes('description が必須'))).toBe(true);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatch(/description が必須/);
     });
 
     it('rejects an overlong description', () => {
@@ -96,6 +99,35 @@ describe('validateGuide', () => {
     });
   });
 
+  describe('title heading (H1)', () => {
+    const fm = 'gameId: my-game\ndescription: 説明です。';
+
+    it('accepts an H1 without a frontmatter title', () => {
+      expect(run(guide({ frontmatter: fm, body: '# マイゲームの遊び方\n\n本文。\n' }))).toEqual([]);
+    });
+
+    it('requires an H1', () => {
+      const errors = run(`---\n${fm}\n---\n\n## 遊び方\n\n本文。\n`);
+      expect(errors.some((e) => e.includes('記事のタイトルになる見出し(# ...)が必要です'))).toBe(true);
+    });
+
+    it('rejects more than one H1, and an H1 that is not the first heading', () => {
+      const errors = run(`---\n${fm}\n---\n\n## はじめに\n\n# タイトル\n\n# 2つ目\n`);
+      expect(errors.some((e) => e.includes('1つだけにしてください'))).toBe(true);
+      expect(errors.some((e) => e.includes('本文の最初の見出しにしてください'))).toBe(true);
+    });
+
+    it('rejects a frontmatter title that differs from the H1', () => {
+      const errors = run(guide({ frontmatter: `${fm}\ntitle: 別のタイトル`, body: '# マイゲームの遊び方\n' }));
+      expect(errors.some((e) => e.includes('一致しません'))).toBe(true);
+    });
+
+    it('rejects an overlong H1', () => {
+      const errors = run(guide({ frontmatter: fm, body: `# ${'あ'.repeat(GUIDE_LIMITS.maxTitleLength + 1)}\n` }));
+      expect(errors.some((e) => e.includes('タイトルの見出しが長すぎます'))).toBe(true);
+    });
+  });
+
   describe('quickRules', () => {
     it('rejects # and #### headings', () => {
       const frontmatter = [
@@ -130,7 +162,7 @@ describe('validateGuide', () => {
 
   describe('body', () => {
     it('rejects raw HTML blocks and inline tags, with a line number', () => {
-      const body = '# 遊び方\n\n<script>alert(1)</script>\n\nテキスト <b>太字</b>\n';
+      const body = '# マイゲームの遊び方\n\n<script>alert(1)</script>\n\nテキスト <b>太字</b>\n';
       const errors = run(guide({ body }));
       // the block counts once; inline <b> and </b> are separate nodes
       expect(errors.filter((e) => e.includes('HTMLタグは書けません'))).toHaveLength(3);
