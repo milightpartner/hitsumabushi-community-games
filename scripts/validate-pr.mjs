@@ -113,7 +113,7 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
       if (content && content.includes('__hitsumabushi_dev__')) {
         errors.push(
           `${file} が開発ハーネス専用パス(/__hitsumabushi_dev__/sdk.js)を参照しています。本番では404になりゲームが反応しなくなります。`
-          + ' <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script> を使う形に書き換えてコミットしてください。',
+          + ' <script src="https://milightpartner.jp/sdk/<version>/hitsumabushi-sdk.js"></script>(<version> は使っているSDKの版。例: 0.20.0)を使う形に書き換えてコミットしてください。',
         );
       }
     }

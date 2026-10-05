@@ -26,14 +26,16 @@ npx -p @milightpartner/hitsumabushi-sdk hitsumabushi init
 - ゲームID(ディレクトリ名)は半角英数小文字とハイフンのみ(`kebab-case`)。
 - `manifest.json` は [ゲームマニフェスト仕様書](https://github.com/milightpartner/OmoshiroGamePortal/blob/main/packages/hitsumabushi-sdk/docs/game-manifest-spec.md) に準拠している必要があります。
 - **一度設定した `creatorGithub` は変更できません**。他人が作ったゲームのディレクトリを、別のGitHubアカウントから変更することはできません(なりすまし防止)。
-- **SDKは公開URLの `<script>` タグで読み込んでください**(推奨・標準の書き方です)。
+- **SDKは公開URLの `<script>` タグで、版を固定して読み込んでください**(推奨・標準の書き方です)。`<version>` には使っているSDKの版(例: `0.20.0`)を入れます。`hitsumabushi init` が作る `index.html` には、最初から入っています。
 
   ```html
-  <script src="https://milightpartner.jp/sdk/hitsumabushi-sdk.js"></script>
+  <script src="https://milightpartner.jp/sdk/<version>/hitsumabushi-sdk.js"></script>
   <script>
     Hitsumabushi.init({ /* ... */ });
   </script>
   ```
+
+  版付きのSDKは一度公開されたら中身が変わらないので、SDKが更新されてもゲームの動きは変わりません。新しい版を使いたいときは、URLの版の部分を書き換えて、更新のPRを送ってください。版なしの `https://milightpartner.jp/sdk/hitsumabushi-sdk.js` は常に最新を返すため、SDKの変更でゲームが動かなくなることがあります。
 
   `index.html`のimport mapが`/__hitsumabushi_dev__/sdk.js`を指したままではいけません。これは`npx hitsumabushi dev`(ローカル開発ハーネス)専用のパスで、本番では404になりゲームが一切反応しなくなります。SDKの実体をリポジトリにコピーする(vendoring)運用も採っていません。`hitsumabushi init` が作るテンプレートをそのまま使っていれば、通常は意識する必要はありません。
 
