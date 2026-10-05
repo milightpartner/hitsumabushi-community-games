@@ -202,6 +202,9 @@
     const VISIBLE_MS = 2000;
     const AUTO_STOP_MS = 30000;
     const HEARTBEAT_MS = 3000;
+    // 誰も「終了」を押さなかったときに、ホストが自動で結果を報告するまでの時間
+    // （ホストが画面を閉じるとタイマーも止まるので、その場合は報告されない）
+    const AUTO_FINISH_MS = 30000;
 
     let myPlayerId = 'p1';
     let isSpectator = false;
@@ -218,6 +221,7 @@
     // 結果をポータルに報告したか。報告するとポータルの結果ダイアログが出て、このゲームの
     // リザルトが隠れるので、自動では報告せず、リザルトの下の「終了」ボタンで報告する
     let reported = false;
+    let autoFinishTimer = null;
     let cpuTimeouts = [];
     let results = {};
 
@@ -253,6 +257,8 @@
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
       reported = false;
+      if (autoFinishTimer) clearTimeout(autoFinishTimer);
+      autoFinishTimer = null;
       cpuTimeouts.forEach((id) => clearTimeout(id));
       cpuTimeouts = [];
 
@@ -441,6 +447,8 @@
       // リザルトはここで出し終えているので、スタート/ストップのボタンは隠し、下に「終了」を出す
       els.actionBtn.hidden = true;
       els.finishBtn.hidden = isSpectator;
+      els.finishHint.textContent = `押さなくても${AUTO_FINISH_MS / 1000}秒後に自動で終了します`;
+      if (Hitsumabushi.isGameMaster()) autoFinishTimer = setTimeout(finishMatch, AUTO_FINISH_MS);
     }
 
     // 「終了」：結果をポータルに報告する（ポータルの結果ダイアログが出る）
@@ -448,6 +456,8 @@
       if (!isGameOver || reported) return;
       if (Hitsumabushi.isGameMaster()) {
         reported = true;
+        if (autoFinishTimer) clearTimeout(autoFinishTimer);
+        autoFinishTimer = null;
         finalizeGameOverAsHost();
       } else {
         Hitsumabushi.sendGameData({ type: 'FINISH' });
