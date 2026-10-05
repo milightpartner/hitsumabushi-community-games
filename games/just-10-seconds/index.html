@@ -268,7 +268,7 @@
         const isMe = p.id === myPlayerId;
         return `<div class="player-chip" id="chip-${p.id}" style="--pc:${p.color || '#00f0ff'}">
           <span class="chip-name">${escapeHtml(p.name)}${isMe ? '（あなた）' : ''}${p.isCpu ? ' 🤖' : ''}</span>
-          <span class="chip-status" id="status-${p.id}">待機中</span>
+          <span class="chip-status" id="status-${p.id}">${isMe ? '待機中' : '—'}</span>
         </div>`;
       }).join('');
     }
@@ -281,12 +281,14 @@
       chip.classList.toggle('done', !!done);
     }
 
+    // 他のプレイヤーが計測を終えたかどうかは、全員が終わるまで見せない
+    // （いつストップしたかが分かると、駆け引きやタイミングの手がかりになってしまうため）
     function updateStatusDisplay() {
-      players.forEach((p) => {
-        if (results[p.id] != null) {
-          updatePlayerChip(p.id, '計測終了・結果待ち', true);
-        }
-      });
+      if (isGameOver) {
+        players.forEach((p) => updatePlayerChip(p.id, '計測終了', true));
+      } else if (results[myPlayerId] != null) {
+        updatePlayerChip(myPlayerId, '計測終了・結果待ち', true);
+      }
     }
 
     Hitsumabushi.init({
@@ -363,12 +365,13 @@
       if (!Hitsumabushi.isGameMaster()) return;
       players.filter((p) => p.isCpu).forEach((cpu) => {
         const startDelay = 400 + Math.random() * 1200;
+        const noise = (Math.random() - 0.5) * 2 * 1800; // ±1.8秒程度のブレ
+        const elapsedMs = Math.max(500, TARGET_MS + noise);
+        // 人と同じく、スタートしてから計った時間が経ったところで結果を出す
         const timeoutId = setTimeout(() => {
           if (isGameOver || results[cpu.id] != null) return;
-          const noise = (Math.random() - 0.5) * 2 * 1800; // ±1.8秒程度のブレ
-          const elapsedMs = Math.max(500, TARGET_MS + noise);
           submitResult(cpu.id, elapsedMs);
-        }, startDelay);
+        }, startDelay + elapsedMs);
         cpuTimeouts.push(timeoutId);
       });
     }
@@ -390,6 +393,7 @@
       if (players.length === 0 || Object.keys(results).length < players.length) return;
       isGameOver = true;
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+      updateStatusDisplay();
       renderLeaderboard();
       if (Hitsumabushi.isGameMaster()) reportTimer = setTimeout(finalizeGameOverAsHost, REPORT_DELAY_MS);
     }
@@ -472,6 +476,7 @@
       els.stageHint.textContent = '数字が見えるのは最初の2秒だけ！';
       els.actionBtn.textContent = '⏹ ストップ！';
       els.actionBtn.classList.add('stop');
+      updatePlayerChip(myPlayerId, '計測中', false);
       autoStopTimer = setTimeout(() => finishMyRun(true), AUTO_STOP_MS);
       rafId = requestAnimationFrame(tick);
     }
