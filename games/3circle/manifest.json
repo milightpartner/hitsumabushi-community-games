@@ -1,0 +1,16 @@
+{
+  "gameId": "3circle",
+  "title": "3Circle",
+  "version": "0.1.0",
+  "players": {
+    "min": 2,
+    "max": 4,
+    "type": "variable",
+    "allowCpuFill": true
+  },
+  "creatorGithub": "milightpartner",
+  "resultModel": {
+    "type": "single_winner",
+    "allowTie": true
+  }
+}
