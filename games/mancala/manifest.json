@@ -1,7 +1,7 @@
 {
   "gameId": "mancala",
   "title": "マンカラ",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "players": {
     "min": 2,
     "max": 2,
