@@ -1,7 +1,7 @@
 {
   "gameId": "just-10-seconds",
   "title": "ジャスト10秒",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "players": {
     "min": 2,
     "max": 6,
@@ -12,5 +12,5 @@
     "type": "single_winner",
     "allowTie": true
   },
-  "creatorGithub": "8720soichiro"
+  "creatorGithub": "milightpartner"
 }

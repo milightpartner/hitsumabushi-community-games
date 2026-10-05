@@ -187,12 +187,9 @@
   </div>
 
   <!--
-    ひつまぶしSDKを公開URLから読み込む。ビルドもバンドラも不要で、
-    開発ハーネス(`npx hitsumabushi dev`)でも、静的ホストへ置いた本番でも、
-    この1行がそのまま動く。グローバルの `Hitsumabushi` として利用できる。
-    ※ npm + バンドラを使う場合は、代わりに
-       import { Hitsumabushi } from '@milightpartner/hitsumabushi-sdk';
-       と書いてこのscriptタグを削除してよい。
+    ひつまぶしSDKを公開URLから読み込む。グローバルの `Hitsumabushi` として利用できる。
+    URLの版を固定しているので、SDKが更新されてもこのゲームの動きは変わらない。
+    SDKを更新するときは、URLの版の部分を書き換える。
   -->
   <script src="https://milightpartner.jp/sdk/0.20.0/hitsumabushi-sdk.js"></script>
   <script>
@@ -420,7 +417,6 @@
           winnerId = p.id;
         }
       });
-      Hitsumabushi.sendScoreUpdate(scores);
       Hitsumabushi.sendGameOver({
         winnerPlayerId: winnerId,
         scores,
