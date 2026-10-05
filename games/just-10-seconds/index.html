@@ -197,6 +197,9 @@
     const VISIBLE_MS = 2000;
     const AUTO_STOP_MS = 30000;
     const HEARTBEAT_MS = 3000;
+    // リザルトを見てもらってから結果を報告する。報告するとポータルの結果ダイアログが出て、
+    // このゲームのリザルト（各自のタイム）が隠れてしまうため
+    const REPORT_DELAY_MS = 3000;
 
     let myPlayerId = 'p1';
     let isSpectator = false;
@@ -210,6 +213,7 @@
     let rafId = null;
     let autoStopTimer = null;
     let heartbeatTimer = null;
+    let reportTimer = null;
     let cpuTimeouts = [];
     let results = {};
 
@@ -242,6 +246,8 @@
       autoStopTimer = null;
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
+      if (reportTimer) clearTimeout(reportTimer);
+      reportTimer = null;
       cpuTimeouts.forEach((id) => clearTimeout(id));
       cpuTimeouts = [];
 
@@ -385,7 +391,7 @@
       isGameOver = true;
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
       renderLeaderboard();
-      if (Hitsumabushi.isGameMaster()) finalizeGameOverAsHost();
+      if (Hitsumabushi.isGameMaster()) reportTimer = setTimeout(finalizeGameOverAsHost, REPORT_DELAY_MS);
     }
 
     // 10秒との誤差（ミリ秒。リザルトに表示している精度で比べる）
@@ -421,16 +427,20 @@
     }
 
     function finalizeGameOverAsHost() {
+      reportTimer = null;
+      // スコアは計測タイム（秒、小数3桁）。ポータルはこの値をそのまま表示する
       const scores = {};
       players.forEach((p) => {
-        scores[p.id] = Math.round(results[p.id]);
+        scores[p.id] = Number((results[p.id] / 1000).toFixed(3));
       });
+      // 10秒に近い順
+      const rankings = players.slice().sort((a, b) => diffMs(a.id) - diffMs(b.id)).map((p) => p.id);
       const winners = winnerIds();
       const stats = { targetMs: TARGET_MS, results };
       if (winners.length === 1) {
-        Hitsumabushi.sendGameOver({ winnerPlayerId: winners[0], scores, stats });
+        Hitsumabushi.sendGameOver({ winnerPlayerId: winners[0], rankings, scores, stats });
       } else {
-        Hitsumabushi.sendGameOver({ isTie: true, scores, stats });
+        Hitsumabushi.sendGameOver({ isTie: true, rankings, scores, stats });
       }
     }
 
