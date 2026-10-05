@@ -138,6 +138,9 @@
 
     .leaderboard-panel { display: none; flex-direction: column; gap: 8px; }
     .leaderboard-panel.show { display: flex; }
+    .action-btn[hidden] { display: none; }
+    .finish-btn { margin-top: 8px; align-self: center; }
+    .finish-hint { text-align: center; font-size: 0.8rem; color: var(--muted); }
     .leaderboard-title { font-size: 1rem; color: var(--gold); }
     .result-row {
       display: flex;
@@ -183,6 +186,8 @@
     <div class="leaderboard-panel" id="leaderboardPanel">
       <div class="leaderboard-title">🏆 リザルト</div>
       <div id="leaderboard"></div>
+      <button class="action-btn finish-btn" id="finishBtn" hidden>終了</button>
+      <div class="finish-hint" id="finishHint"></div>
     </div>
   </div>
 
@@ -197,9 +202,6 @@
     const VISIBLE_MS = 2000;
     const AUTO_STOP_MS = 30000;
     const HEARTBEAT_MS = 3000;
-    // リザルトを見てもらってから結果を報告する。報告するとポータルの結果ダイアログが出て、
-    // このゲームのリザルト（各自のタイム）が隠れてしまうため
-    const REPORT_DELAY_MS = 3000;
 
     let myPlayerId = 'p1';
     let isSpectator = false;
@@ -213,7 +215,9 @@
     let rafId = null;
     let autoStopTimer = null;
     let heartbeatTimer = null;
-    let reportTimer = null;
+    // 結果をポータルに報告したか。報告するとポータルの結果ダイアログが出て、このゲームの
+    // リザルトが隠れるので、自動では報告せず、リザルトの下の「終了」ボタンで報告する
+    let reported = false;
     let cpuTimeouts = [];
     let results = {};
 
@@ -226,6 +230,8 @@
       mainStage: document.getElementById('mainStage'),
       leaderboardPanel: document.getElementById('leaderboardPanel'),
       leaderboard: document.getElementById('leaderboard'),
+      finishBtn: document.getElementById('finishBtn'),
+      finishHint: document.getElementById('finishHint'),
     };
 
     function escapeHtml(str) {
@@ -246,8 +252,7 @@
       autoStopTimer = null;
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
-      if (reportTimer) clearTimeout(reportTimer);
-      reportTimer = null;
+      reported = false;
       cpuTimeouts.forEach((id) => clearTimeout(id));
       cpuTimeouts = [];
 
@@ -258,6 +263,11 @@
       els.actionBtn.textContent = '▶ スタート';
       els.actionBtn.className = 'action-btn';
       els.actionBtn.disabled = isSpectator;
+      els.actionBtn.hidden = false;
+      els.finishBtn.hidden = true;
+      els.finishBtn.disabled = false;
+      els.finishBtn.textContent = '終了';
+      els.finishHint.textContent = '';
       els.myResult.textContent = '';
       els.leaderboardPanel.classList.remove('show');
       els.leaderboard.innerHTML = '';
@@ -316,6 +326,9 @@
           handleIncomingResult(payload, senderId);
         } else if (payload.type === 'STATE_SYNC') {
           handleStateSync(payload, senderId);
+        } else if (payload.type === 'FINISH') {
+          // ゲストが「終了」を押した。結果を報告できるのはホストだけなので代わりに報告する
+          if (Hitsumabushi.isGameMaster() && players.some((p) => p.id === senderId && !p.isCpu)) finishMatch();
         }
       },
     });
@@ -395,7 +408,6 @@
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
       updateStatusDisplay();
       renderLeaderboard();
-      if (Hitsumabushi.isGameMaster()) reportTimer = setTimeout(finalizeGameOverAsHost, REPORT_DELAY_MS);
     }
 
     // 10秒との誤差（ミリ秒。リザルトに表示している精度で比べる）
@@ -426,12 +438,25 @@
       }).join('');
       els.leaderboardPanel.classList.add('show');
       els.mainStage.classList.add('hidden-stage');
-      els.actionBtn.disabled = true;
-      els.actionBtn.textContent = '結果発表！';
+      // リザルトはここで出し終えているので、スタート/ストップのボタンは隠し、下に「終了」を出す
+      els.actionBtn.hidden = true;
+      els.finishBtn.hidden = isSpectator;
+    }
+
+    // 「終了」：結果をポータルに報告する（ポータルの結果ダイアログが出る）
+    function finishMatch() {
+      if (!isGameOver || reported) return;
+      if (Hitsumabushi.isGameMaster()) {
+        reported = true;
+        finalizeGameOverAsHost();
+      } else {
+        Hitsumabushi.sendGameData({ type: 'FINISH' });
+      }
+      els.finishBtn.disabled = true;
+      els.finishHint.textContent = '終了しています…';
     }
 
     function finalizeGameOverAsHost() {
-      reportTimer = null;
       // スコアは計測タイム（秒、小数3桁）。ポータルはこの値をそのまま表示する
       const scores = {};
       players.forEach((p) => {
@@ -505,6 +530,8 @@
 
       submitResult(myPlayerId, elapsedMs);
     }
+
+    els.finishBtn.addEventListener('click', finishMatch);
 
     els.actionBtn.addEventListener('click', () => {
       if (phase === 'waiting') onStartClicked();
