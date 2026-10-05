@@ -201,6 +201,7 @@
     let myPlayerId = 'p1';
     let isSpectator = false;
     let players = [];
+    let gameMasterId = null;
     let isGameOver = false;
 
     // waiting -> running -> hidden -> done
@@ -283,10 +284,11 @@
     }
 
     Hitsumabushi.init({
-      onInitGame(config) {
-        // ⚠️ onInitGame はリマッチ時にも再度呼び出されるため、毎回内部状態を初期化する
+      onStartMatch(config) {
+        // ⚠️ onStartMatch はリマッチ時にも再度呼び出されるため、毎回内部状態を初期化する
         myPlayerId = config.localPlayerId;
         players = config.players || [];
+        gameMasterId = config.gameMasterId || null;
 
         isSpectator = Hitsumabushi.isSpectator();
         document.body.classList.toggle('spectating', isSpectator);
@@ -315,8 +317,9 @@
       return !!(p && p.isCpu);
     }
 
+    // ホスト（試合の進行役）は、ポータルが決めた gameMasterId（CPUではない最初の参加者）
     function hostPlayerId() {
-      return players[0] && players[0].id;
+      return gameMasterId;
     }
 
     // 送信元の正当性チェック：本人の申告 or （CPUの結果を代弁できる）ホストからの送信のみ信頼する
@@ -344,12 +347,14 @@
     }
 
     function submitResult(playerId, elapsedMs) {
-      recordResult(playerId, elapsedMs);
+      // 送ってから記録する。ホストが最後に計測を終えると、記録した時点で sendGameOver まで進み、
+      // その後の送信は SDK に止められる（MATCH_OVER）ため、他の人に自分の結果が届かなくなる
       Hitsumabushi.sendGameData({ type: 'RESULT', playerId, elapsedMs });
+      recordResult(playerId, elapsedMs);
     }
 
     function runCpuPlayers() {
-      if (!Hitsumabushi.isHost()) return;
+      if (!Hitsumabushi.isGameMaster()) return;
       players.filter((p) => p.isCpu).forEach((cpu) => {
         const startDelay = 400 + Math.random() * 1200;
         const timeoutId = setTimeout(() => {
@@ -363,7 +368,7 @@
     }
 
     function startHeartbeat() {
-      if (!Hitsumabushi.isHost()) return;
+      if (!Hitsumabushi.isGameMaster()) return;
       heartbeatTimer = setInterval(() => {
         if (isGameOver) {
           clearInterval(heartbeatTimer);
@@ -380,18 +385,29 @@
       isGameOver = true;
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
       renderLeaderboard();
-      if (Hitsumabushi.isHost()) finalizeGameOverAsHost();
+      if (Hitsumabushi.isGameMaster()) finalizeGameOverAsHost();
+    }
+
+    // 10秒との誤差（ミリ秒。リザルトに表示している精度で比べる）
+    function diffMs(playerId) {
+      return Math.round(Math.abs(results[playerId] - TARGET_MS));
+    }
+
+    // 誤差が最小の参加者。同じ誤差の人が複数いれば引き分け
+    function winnerIds() {
+      const best = Math.min(...players.map((p) => diffMs(p.id)));
+      return players.filter((p) => diffMs(p.id) === best).map((p) => p.id);
     }
 
     function renderLeaderboard() {
-      const sorted = players.slice().sort((a, b) =>
-        Math.abs(results[a.id] - TARGET_MS) - Math.abs(results[b.id] - TARGET_MS)
-      );
+      const sorted = players.slice().sort((a, b) => diffMs(a.id) - diffMs(b.id));
+      const winners = winnerIds();
       els.leaderboard.innerHTML = sorted.map((p, i) => {
         const elapsed = results[p.id];
         const diff = Math.abs(elapsed - TARGET_MS);
-        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '　';
-        return `<div class="result-row ${i === 0 ? 'winner' : ''}">
+        const isWinner = winners.includes(p.id);
+        const medal = isWinner ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '　';
+        return `<div class="result-row ${isWinner ? 'winner' : ''}">
           <span class="rank">${medal}</span>
           <span class="name">${escapeHtml(p.name)}${p.id === myPlayerId ? '（あなた）' : ''}</span>
           <span class="time">${(elapsed / 1000).toFixed(3)}s</span>
@@ -405,23 +421,17 @@
     }
 
     function finalizeGameOverAsHost() {
-      let winnerId = null;
-      let bestDiff = Infinity;
       const scores = {};
       players.forEach((p) => {
-        const elapsed = results[p.id];
-        scores[p.id] = Math.round(elapsed);
-        const diff = Math.abs(elapsed - TARGET_MS);
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          winnerId = p.id;
-        }
+        scores[p.id] = Math.round(results[p.id]);
       });
-      Hitsumabushi.sendGameOver({
-        winnerPlayerId: winnerId,
-        scores,
-        stats: { targetMs: TARGET_MS, results },
-      });
+      const winners = winnerIds();
+      const stats = { targetMs: TARGET_MS, results };
+      if (winners.length === 1) {
+        Hitsumabushi.sendGameOver({ winnerPlayerId: winners[0], scores, stats });
+      } else {
+        Hitsumabushi.sendGameOver({ isTie: true, scores, stats });
+      }
     }
 
     function tick() {
