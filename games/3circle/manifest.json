@@ -1,7 +1,7 @@
 {
   "gameId": "3circle",
   "title": "3Circle",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "players": {
     "min": 2,
     "max": 4,
