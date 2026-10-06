@@ -37,5 +37,8 @@ jobs:
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          # The GitHub App bot that opens the automated hitsudoc bump PR (OmoshiroGamePortal#448),
+          # as "<app-slug>[bot]". Unset = no PR is treated as that bump (scripts/hitsudoc-bump.mjs).
+          HITSUDOC_BOT_LOGIN: ${{ vars.HITSUDOC_BOT_LOGIN }}
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
         run: npm run validate-pr

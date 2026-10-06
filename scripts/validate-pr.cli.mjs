@@ -6,6 +6,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import Ajv from 'ajv';
 import { validatePr, validateRepository } from './validate-pr.mjs';
+import { isHitsudocBumpPr, BUILD_GUIDES_ACTION } from './hitsudoc-bump.mjs';
 
 // The SDK's JSON Schema is authored and versioned in OmoshiroGamePortal (a private repo), so it
 // can't be pulled in as an npm dependency here without exposing a registry token to fork PRs -
@@ -108,6 +109,22 @@ if (creatorsMalformed) {
 }
 
 const validateManifestSchema = await loadManifestSchemaValidator();
+
+// The automated hitsudoc version bump (OmoshiroGamePortal#448) - see hitsudoc-bump.mjs.
+let baseActionText = null;
+try {
+  baseActionText = execSync(`git show ${baseRef}:${BUILD_GUIDES_ACTION}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] });
+} catch {}
+if (isHitsudocBumpPr({
+  prAuthor,
+  botLogin: process.env.HITSUDOC_BOT_LOGIN,
+  changedFiles,
+  baseText: baseActionText,
+  headText: readHeadFileText(BUILD_GUIDES_ACTION),
+})) {
+  console.log(`✅ hitsudoc の版を上げる自動PR(${prAuthor})として検証しました。${BUILD_GUIDES_ACTION} の版の行だけが変わっています。`);
+  process.exit(0);
+}
 
 // Maintainer infrastructure PRs (issue #5). games/-only / one-game-per-PR exist so untrusted
 // submissions can be accepted safely; they would otherwise block every scripts/, workflow or
