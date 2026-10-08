@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <!-- 背中は濃い金、お腹は明るい金 -->
+    <linearGradient id="body" x1="0" y1="44" x2="0" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b87400"/>
+      <stop offset="0.45" stop-color="#ffc400"/>
+      <stop offset="1" stop-color="#fff3b0"/>
+    </linearGradient>
+    <linearGradient id="fin" x1="0" y1="40" x2="0" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe680"/>
+      <stop offset="1" stop-color="#ffb300"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="64" cy="66" r="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe680" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#ffe680" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="64" cy="66" r="62" fill="url(#glow)"/>
+
+  <!-- 背びれ・尻びれ（体のまわりに薄く広がるひれ） -->
+  <path d="M12 80 C 28 52, 44 50, 58 70 S 84 92, 98 64" fill="none" stroke="#7a4b00" stroke-width="27" stroke-linecap="round"/>
+  <path d="M12 80 C 28 52, 44 50, 58 70 S 84 92, 98 64" fill="none" stroke="url(#fin)" stroke-width="22" stroke-linecap="round" opacity="0.9"/>
+  <path d="M12 80 C 28 52, 44 50, 58 70 S 84 92, 98 64" fill="none" stroke="#7a4b00" stroke-width="1.5" stroke-dasharray="1.5 4" opacity="0.6"/>
+
+  <!-- 体 -->
+  <path d="M12 80 C 28 52, 44 50, 58 70 S 84 92, 98 64" fill="none" stroke="#7a4b00" stroke-width="15" stroke-linecap="round"/>
+  <path d="M12 80 C 28 52, 44 50, 58 70 S 84 92, 98 64" fill="none" stroke="url(#body)" stroke-width="11" stroke-linecap="round"/>
+  <!-- 光の筋 -->
+  <path d="M22 66 C 32 56, 42 56, 52 64" fill="none" stroke="#fffbe0" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+  <path d="M68 80 C 78 86, 86 80, 92 70" fill="none" stroke="#fffbe0" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- 頭（細長く、口先がとがっている） -->
+  <path d="M90 70 C 92 56, 104 48, 118 50 C 122 51, 123 54, 119 56 C 110 60, 102 66, 96 74 Z" fill="url(#body)" stroke="#7a4b00" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M106 58 C 111 56, 116 55, 120 54" fill="none" stroke="#7a4b00" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="104" cy="54" r="3.6" fill="#fff"/>
+  <circle cx="104.8" cy="53.6" r="1.9" fill="#2b1a00"/>
+  <!-- 胸びれ -->
+  <path d="M96 66 q -4 7 2 10 q 2 -6 4 -8 z" fill="url(#fin)" stroke="#7a4b00" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- きらめき -->
+  <path d="M28 20 l3 9 l9 3 l-9 3 l-3 9 l-3 -9 l-9 -3 l9 -3 z" fill="#fffbe0"/>
+  <path d="M104 92 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 z" fill="#fffbe0"/>
+  <path d="M70 30 l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 z" fill="#fff6c2"/>
+</svg>
