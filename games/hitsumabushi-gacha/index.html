@@ -249,7 +249,30 @@
       from { transform: rotateY(90deg) scale(0.8); opacity: 0; }
       to { transform: rotateY(0) scale(1); opacity: 1; }
     }
-    .gc .em { line-height: 1; }
+    .gc .em { line-height: 1; display: inline-flex; }
+    .gc .em img, .rate-icon img { display: block; width: 1.25em; height: 1.25em; object-fit: contain; }
+    .rate-icon { display: inline-flex; font-size: 1em; }
+    /* 虹：ひつまぶしのロゴの上に虹色を流して重ねる */
+    .rainbow-icon {
+      position: relative;
+      display: inline-block;
+      border-radius: 22%;
+      overflow: hidden;
+      filter: drop-shadow(0 0 6px #ff7af5) drop-shadow(0 0 10px #00f0ff);
+    }
+    .rainbow-icon img { display: block; }
+    .rainbow-icon::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #ff004c, #ff9a00, #ffe600, #39ff14, #00f0ff, #7a5cff, #ff00d4, #ff004c, #ff9a00, #ffe600);
+      background-size: 200% 200%;
+      mix-blend-mode: color;
+      opacity: 0.8;
+      animation: rainbowShift 2.4s linear infinite;
+    }
+    @keyframes rainbowShift { to { background-position: 200% 200%; } }
+    .gc.big .em img { width: 1.6em; height: 1.6em; }
     .gc .nm { color: var(--c); font-weight: 800; }
     .gc.r4 .nm {
       background: var(--rainbow);
@@ -485,8 +508,8 @@
       { name: '白', item: 'ごはん', emoji: '🍚', pts: 1, odds: 347, color: '#e2e8f0' },
       { name: '青', item: '薬味', emoji: '🌿', pts: 3, odds: 40, color: '#38bdf8' },
       { name: '赤', item: 'お出汁', emoji: '🍵', pts: 5, odds: 8, color: '#ff3b5c' },
-      { name: '金', item: 'うなぎ', emoji: '👑', pts: 7, odds: 4, color: '#ffd700' },
-      { name: '虹', item: '特上ひつまぶし', emoji: '🌈', pts: 10, odds: 1, color: '#ff7af5' },
+      { name: '金', item: 'うなぎ', icon: 'assets/unagi-gold.svg', pts: 7, odds: 4, color: '#ffd700' },
+      { name: '虹', item: '特上ひつまぶし', icon: 'assets/hitsumabushi.png', rainbow: true, pts: 10, odds: 1, color: '#ff7af5' },
     ];
     const ODDS_TOTAL = 400;
     const RATE_LABELS = ['', '1/10', '1/50', '1/100', '1/400'];
@@ -740,7 +763,7 @@
     function renderRates() {
       els.rateList.innerHTML = RARITIES.map((r, i) => {
         const rate = i === 0 ? '' : ` ${RATE_LABELS[i]}`;
-        return `<span class="rate r${i}" style="--c:${r.color}">${r.emoji} ${r.name}${rate} <span class="rate-pt">${r.pts}pt</span></span>`;
+        return `<span class="rate r${i}" style="--c:${r.color}"><span class="rate-icon">${iconHtml(i)}</span> ${r.name}${rate} <span class="rate-pt">${r.pts}pt</span></span>`;
       }).join('');
     }
 
@@ -809,10 +832,18 @@
       }
     }
 
+    // アイテムの絵。金・虹は画像（虹はひつまぶしのロゴに虹色を重ねる）、それ以外は絵文字
+    function iconHtml(r) {
+      const rr = RARITIES[r];
+      if (!rr.icon) return rr.emoji;
+      const img = `<img src="${rr.icon}" alt="${rr.item}" draggable="false">`;
+      return rr.rainbow ? `<span class="rainbow-icon">${img}</span>` : img;
+    }
+
     function cardHtml(r, size) {
       const rr = RARITIES[r];
       const item = size === 'big' ? `<span class="it">${rr.item}</span>` : '';
-      return `<div class="gc ${size} r${r}" style="--c:${rr.color}"><span class="em">${rr.emoji}</span><span class="nm">${rr.name}</span>${item}<span class="pt">+${rr.pts}pt</span></div>`;
+      return `<div class="gc ${size} r${r}" style="--c:${rr.color}"><span class="em">${iconHtml(r)}</span><span class="nm">${rr.name}</span>${item}<span class="pt">+${rr.pts}pt</span></div>`;
     }
 
     function summaryHtml(items) {
