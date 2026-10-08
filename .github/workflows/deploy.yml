@@ -15,6 +15,8 @@ on:
     types: [opened, synchronize, reopened, closed]
   push:
     branches: [main]
+  # Manual cleanup of preview channels left behind by closed PRs (see cleanup_preview_channels).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -51,19 +53,27 @@ jobs:
           echo "外部フォークからのPRのため、Firebase Previewチャンネルは発行されません。"
           echo "npx hitsumabushi dev でローカルに動作確認してください。マージ後、本番サイトに反映されます。"
 
-  cleanup_preview_on_close:
-    name: Delete Preview Channel on PR Close
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+  # Deletes the closed PR's preview channels on both sites. (This used to run action-hosting-deploy
+  # again, which deploys a preview rather than deleting one, so channels only went away on expiry
+  # and a busy week of PRs filled the sites' channel quota.) Run manually, it deletes the channels
+  # of every PR that is no longer open.
+  cleanup_preview_channels:
+    name: Delete Preview Channels of Closed PRs
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # firebase.json's guide site needs its public dir (dist-guides/) to exist for any deploy.
-      - uses: ./.github/actions/build-guides
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      - uses: actions/setup-node@v4
         with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_HITU_MABUSI }}'
-          projectId: hitu-mabusi
+          node-version: 22
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_HITU_MABUSI }}'
+      - run: bash scripts/cleanup-preview-channels.sh ${{ github.event.pull_request.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   deploy_live:
     name: Deploy to Live
