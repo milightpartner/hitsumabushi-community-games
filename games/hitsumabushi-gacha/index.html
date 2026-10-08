@@ -1069,10 +1069,8 @@
       const cur = currentPlayerId(sum);
       if (!cur || !isCpuId(cur)) return;
       const remaining = PULLS_PER_PLAYER - sum[cur].pulled;
-      // 最初は半々で100連か10連。そのあとは10連ずつ、端数はまとめて引く
-      let count;
-      if (remaining === PULLS_PER_PLAYER) count = Math.random() < 0.5 ? PULLS_PER_PLAYER : 10;
-      else count = remaining >= 10 ? 10 : remaining;
+      // 待ち時間を短くするため、いつも残りを全部まとめて引く（最初からなら100連）
+      const count = remaining;
       cpuTimer = setTimeout(() => {
         cpuTimer = null;
         hostPull(cur, count, false);
