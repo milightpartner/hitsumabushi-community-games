@@ -1,0 +1,16 @@
+{
+  "gameId": "neon-four-in-a-row",
+  "title": "ネオン四目並べ",
+  "version": "1.0.0",
+  "players": {
+    "min": 2,
+    "max": 2,
+    "type": "fixed",
+    "allowCpuFill": true
+  },
+  "resultModel": {
+    "type": "single_winner",
+    "allowTie": true
+  },
+  "creatorGithub": "milightpartner"
+}
