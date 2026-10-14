@@ -1,0 +1,2096 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ファイブダイス</title>
+  <style>
+    :root {
+      --bg: #0a0b10;
+      --card: rgba(22, 26, 42, 0.92);
+      --accent: #00f0ff;
+      --accent2: #ff007f;
+      --gold: #ffd700;
+      --lime: #39ff14;
+      --muted: #94a3b8;
+      --bad: #ff3b5c;
+      --rainbow: linear-gradient(90deg, #ff004c, #ff9a00, #ffe600, #39ff14, #00f0ff, #7a5cff, #ff00d4, #ff004c);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      overscroll-behavior: none;
+      overflow: hidden;
+    }
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      height: 100dvh;
+      padding: 8px;
+      transition: background-color 0.3s;
+    }
+    body.transparent { background-color: transparent !important; }
+
+    .game-card {
+      position: relative;
+      background: var(--card);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 20px;
+      box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+      padding: 12px;
+      width: 100%;
+      max-width: 1120px;
+      height: 100%;
+      max-height: 860px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      text-align: center;
+    }
+    body.transparent .game-card { background: rgba(10, 11, 16, 0.35); }
+    .game-card.shake { animation: cardShake 0.5s; }
+    @keyframes cardShake {
+      0%, 100% { transform: translate(0, 0); }
+      15% { transform: translate(-8px, 4px); }
+      30% { transform: translate(7px, -5px); }
+      45% { transform: translate(-6px, -3px); }
+      60% { transform: translate(5px, 5px); }
+      75% { transform: translate(-3px, 2px); }
+    }
+
+    /* 観戦者向け表示。観戦中はゲーム操作エリアのタップ・クリックを無効化する */
+    .spectator-badge {
+      display: none;
+      align-self: center;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.12);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      font-size: 0.8rem;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    body.spectating .play-area { pointer-events: none; opacity: 0.85; }
+
+    .title-row { display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; min-height: 44px; flex-shrink: 0; }
+    .title-text { font-size: clamp(1.15rem, 4.5vw, 1.5rem); font-weight: 900; letter-spacing: 0.08em; }
+    .title {
+      background: linear-gradient(90deg, #00f0ff, #fff, #ff007f);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .round-badge {
+      position: absolute;
+      left: 0;
+      font-size: 0.75rem;
+      color: var(--muted);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+    .round-badge:empty { display: none; }
+    .round-badge strong { color: #fff; }
+    .icon-btn {
+      position: absolute;
+      right: 0;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1.05rem;
+      width: 44px;
+      height: 44px;
+      cursor: pointer;
+    }
+
+    .player-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; flex-shrink: 0; }
+    .player-chip {
+      --pc: #00f0ff;
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      padding: 4px 10px;
+      min-width: 96px;
+      font-size: 0.72rem;
+      transition: box-shadow 0.2s, border-color 0.2s;
+    }
+    .player-chip.current { border-color: var(--pc); box-shadow: 0 0 14px var(--pc); }
+    .player-chip .chip-name { display: block; color: var(--pc); font-weight: 700; max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 auto; }
+    .player-chip .chip-score { display: block; font-size: 1rem; font-weight: 800; }
+    .delta {
+      position: absolute;
+      right: 6px;
+      top: -6px;
+      font-weight: 900;
+      font-size: 0.95rem;
+      color: var(--lime);
+      text-shadow: 0 0 8px var(--lime);
+      animation: deltaUp 1.8s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes deltaUp {
+      0% { opacity: 0; transform: translateY(6px); }
+      15% { opacity: 1; transform: translateY(0); }
+      80% { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-14px); }
+    }
+
+    .turn-banner { font-size: 0.92rem; min-height: 1.4em; flex-shrink: 0; }
+    .turn-banner strong { color: var(--gold); }
+
+    /* 本体：左にトレイと操作、右に得点表（狭い画面では縦に並べる） */
+    .main { position: relative; flex: 1; min-height: 0; display: flex; gap: 10px; }
+    .left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+
+    /* トレイの3D表示。サイコロをタップでキープ（自分の番）／演出をスキップ（再生中） */
+    .stage {
+      position: relative;
+      flex: 1;
+      min-height: 180px;
+      border-radius: 16px;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 50% 45%, rgba(0, 240, 255, 0.10), transparent 60%),
+        radial-gradient(ellipse at 50% 50%, #1b2236 0%, #0d1018 75%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      user-select: none;
+      touch-action: manipulation;
+    }
+    .stage.can-hold { cursor: pointer; }
+    body.transparent .stage { background: transparent; border-color: transparent; }
+    .stage canvas { display: block; width: 100%; height: 100%; }
+    .stage-msg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      pointer-events: none;
+    }
+    .stage-msg[hidden] { display: none; }
+    .skip-hint { position: absolute; right: 10px; bottom: 6px; font-size: 0.65rem; color: rgba(255, 255, 255, 0.35); pointer-events: none; }
+    .skip-hint[hidden] { display: none; }
+
+    /* 出た役・記入した役の表示 */
+    .hand-pop {
+      position: absolute;
+      left: 50%;
+      top: 10%;
+      transform: translate(-50%, 0);
+      pointer-events: none;
+      text-align: center;
+      white-space: nowrap;
+      opacity: 0;
+      padding: 6px 22px 8px;
+      border-radius: 18px;
+      background: rgba(10, 11, 16, 0.72);
+      box-shadow: 0 0 24px rgba(0, 0, 0, 0.5);
+    }
+    .hand-pop.go { animation: handPop 2s ease-out forwards; }
+    .hand-pop .hp-name {
+      display: block;
+      font-size: clamp(1.6rem, 6vw, 2.8rem);
+      font-weight: 900;
+      -webkit-text-stroke: 1px rgba(0, 0, 0, 0.5);
+      text-shadow: 0 0 18px rgba(255, 255, 255, 0.35);
+    }
+    .hand-pop .hp-sub { display: block; font-size: 0.85rem; color: #fff; margin-top: 2px; text-shadow: 0 1px 4px #000; }
+    .hand-pop.k-yacht .hp-name {
+      background: var(--rainbow);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: slideX 1.2s linear infinite;
+      filter: drop-shadow(0 0 16px #ff7af5);
+    }
+    .hand-pop.k-bstraight .hp-name, .hand-pop.k-bonus .hp-name { color: var(--gold); text-shadow: 0 0 22px var(--gold), 0 0 40px #ff9a00; }
+    .hand-pop.k-sstraight .hp-name, .hand-pop.k-fullhouse .hp-name, .hand-pop.k-fourdice .hp-name { color: var(--accent); text-shadow: 0 0 20px var(--accent); }
+    .hand-pop.k-score .hp-name { color: var(--lime); text-shadow: 0 0 18px var(--lime); }
+    .hand-pop.k-zero .hp-name { color: var(--muted); }
+    @keyframes handPop {
+      0% { opacity: 0; transform: translate(-50%, 0) scale(2.2); }
+      14% { opacity: 1; transform: translate(-50%, 0) scale(0.92); }
+      22% { transform: translate(-50%, 0) scale(1.04); }
+      30% { transform: translate(-50%, 0) scale(1); }
+      85% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @keyframes handPopIn {
+      from { opacity: 0; transform: translate(-50%, 0) scale(1.6); }
+      to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    }
+    @keyframes slideX { to { background-position: 200% 0; } }
+
+    .play-area { display: flex; flex-direction: column; gap: 6px; align-items: center; flex-shrink: 0; }
+
+    /* 出目の列。タップでキープ（3Dを読み込めないときもここで遊べる） */
+    .dice-strip { display: flex; gap: 8px; justify-content: center; }
+    .die-btn {
+      position: relative;
+      width: 48px;
+      height: 58px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--accent);
+      font-size: 0.55rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+    .die-btn svg { display: block; width: 40px; height: 40px; margin: 0 auto; transition: transform 0.15s; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); }
+    .die-btn .keep { display: block; height: 12px; line-height: 12px; visibility: hidden; }
+    .die-btn.held svg { transform: translateY(-3px); filter: drop-shadow(0 0 6px var(--accent)); }
+    .die-btn.held .keep { visibility: visible; }
+    .die-btn:disabled { cursor: default; }
+    .die-btn.blank svg { opacity: 0.25; }
+
+    .btn-row { display: flex; gap: 8px; justify-content: center; width: 100%; }
+    .roll-btn, .score-btn {
+      flex: 0 1 260px;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 50px;
+      padding: 8px 18px;
+      border-radius: 14px;
+      border: none;
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    .roll-btn {
+      background: linear-gradient(90deg, #00f0ff, #7a5cff);
+      color: #0a0b10;
+      box-shadow: 0 0 18px rgba(0, 240, 255, 0.45);
+    }
+    .score-btn {
+      background: linear-gradient(90deg, #39ff14, #00f0ff);
+      color: #0a0b10;
+      box-shadow: 0 0 18px rgba(57, 255, 20, 0.35);
+    }
+    .roll-btn:active, .score-btn:active { transform: scale(0.95); }
+    .roll-btn:disabled, .score-btn:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
+    .hint { font-size: 0.72rem; color: var(--muted); min-height: 1.2em; }
+
+    /* 得点表 */
+    .sheet-wrap {
+      width: clamp(270px, 34%, 400px);
+      flex-shrink: 0;
+      overflow-y: auto;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(10, 11, 16, 0.45);
+    }
+    .sheet { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .sheet th, .sheet td { padding: 0 4px; height: 27px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+    .sheet thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #131726;
+      color: var(--pc, var(--muted));
+      font-weight: 800;
+      font-size: 0.72rem;
+      max-width: 5em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      height: 32px;
+    }
+    .sheet thead th.cur { box-shadow: inset 0 -3px 0 var(--pc); }
+    .sheet thead th small { display: block; font-size: 0.6rem; color: var(--muted); font-weight: 400; line-height: 1; }
+    .sheet .cat { text-align: left; white-space: nowrap; }
+    .sheet .cat .cat-hint { display: block; font-size: 0.58rem; color: var(--muted); line-height: 1; }
+    .sheet td.v { width: 3.6em; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .sheet td.preview { color: rgba(0, 240, 255, 0.55); font-weight: 600; }
+    .sheet td.preview.zero { color: rgba(255, 59, 92, 0.45); }
+    .sheet td.pick { cursor: pointer; background: rgba(0, 240, 255, 0.06); }
+    .sheet td.pick:hover { background: rgba(0, 240, 255, 0.16); }
+    .sheet td.sel { background: rgba(57, 255, 20, 0.2) !important; color: var(--lime); box-shadow: inset 0 0 0 2px var(--lime); }
+    .sheet td.just { animation: cellFlash 1.4s ease-out; }
+    @keyframes cellFlash {
+      0% { background: rgba(57, 255, 20, 0.7); color: #0a0b10; }
+      100% { background: transparent; }
+    }
+    .sheet tr.sub td, .sheet tr.sub th { background: rgba(255, 255, 255, 0.03); color: var(--muted); font-size: 0.72rem; height: 23px; }
+    .sheet tr.sub td.got { color: var(--gold); font-weight: 800; }
+    .sheet tr.total td, .sheet tr.total th { height: 34px; font-size: 0.95rem; font-weight: 900; border-top: 1px solid rgba(0, 240, 255, 0.35); }
+    .sheet tr.total td { color: #fff; }
+    .sheet tr.lower-start td, .sheet tr.lower-start th { border-top: 1px solid rgba(0, 240, 255, 0.35); }
+
+    .result-panel {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(10, 11, 16, 0.82);
+      backdrop-filter: blur(4px);
+    }
+    .result-panel.show { display: flex; }
+    .result-title { font-size: 1.05rem; color: var(--gold); font-weight: 800; }
+    .result-list { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 0.85rem;
+    }
+    .result-row.winner { border: 1px solid var(--gold); box-shadow: 0 0 14px rgba(255, 215, 0, 0.35); }
+    .result-row .rank { width: 1.6em; }
+    .result-row .name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .result-row .points { font-weight: 800; min-width: 3.5em; text-align: right; }
+    .finish-btn {
+      min-width: 140px;
+      min-height: 46px;
+      border-radius: 14px;
+      border: none;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #0a0b10;
+    }
+    .finish-btn[hidden] { display: none; }
+    .finish-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 50; overflow: hidden; }
+    .confetti {
+      position: absolute;
+      top: -20px;
+      width: 8px;
+      height: 14px;
+      background: var(--c);
+      animation: confetti var(--t) linear forwards;
+    }
+    @keyframes confetti {
+      to { transform: translate(var(--dx), 110vh) rotate(var(--rot)); }
+    }
+
+    @media (max-width: 759px) {
+      .main { flex-direction: column; gap: 6px; }
+      .sheet-wrap { width: 100%; flex: 0 1 auto; max-height: 42%; }
+      .sheet .cat .cat-hint { display: none; }
+      .sheet th, .sheet td { height: 23px; }
+      .roll-btn, .score-btn { min-height: 44px; padding: 6px 8px; font-size: 0.82rem; letter-spacing: 0; }
+      .die-btn { width: 42px; height: 52px; }
+      .die-btn svg { width: 34px; height: 34px; }
+    }
+    /* 狭い画面では、タイトルが左右のバッジ・ボタンと重ならないようにアイコンを省く */
+    @media (max-width: 420px) {
+      .title-icon, .rb-label { display: none; }
+    }
+    @media (max-width: 360px) {
+      .roll-btn, .score-btn { font-size: 0.74rem; }
+    }
+    @media (max-height: 620px) {
+      .player-list { display: none; }
+      .title-row { min-height: 36px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .game-card.shake { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="fx-layer" id="fxLayer"></div>
+
+  <div class="game-card" id="gameCard">
+    <div class="spectator-badge">👀 観戦中</div>
+    <div class="title-row">
+      <span class="round-badge" id="roundBadge"></span>
+      <h2 class="title-text"><span class="title-icon">🎲 </span><span class="title">ファイブダイス</span></h2>
+      <button class="icon-btn" id="soundBtn" title="効果音のオン・オフ" aria-label="効果音のオン・オフ">🔊</button>
+    </div>
+
+    <div class="player-list" id="playerList"></div>
+    <div class="turn-banner" id="turnBanner"></div>
+
+    <div class="main">
+      <div class="left">
+        <div class="stage" id="stage">
+          <div class="stage-msg" id="stageMsg">トレイを用意しています…</div>
+          <div class="hand-pop" id="handPop"><span class="hp-name"></span><span class="hp-sub"></span></div>
+          <div class="skip-hint" id="skipHint" hidden>タップでスキップ</div>
+        </div>
+
+        <!-- 操作可能なUIは .play-area の中に置く（観戦時に自動でロックされる） -->
+        <div class="play-area" id="playArea">
+          <div class="dice-strip" id="diceStrip"></div>
+          <div class="btn-row">
+            <button class="roll-btn" id="rollBtn" disabled>振る</button>
+            <button class="score-btn" id="scoreBtn" disabled>役を選んで記入</button>
+          </div>
+          <div class="hint" id="hint"></div>
+        </div>
+      </div>
+
+      <div class="sheet-wrap" id="sheetWrap">
+        <table class="sheet" id="sheet"></table>
+      </div>
+
+      <div class="result-panel" id="resultPanel">
+        <div class="result-title">🏆 結果</div>
+        <div class="result-list" id="resultList"></div>
+        <button class="finish-btn" id="finishBtn" hidden>終了</button>
+        <div class="hint" id="finishHint"></div>
+      </div>
+    </div>
+  </div>
+
+  <!--
+    ひつまぶしSDKを公開URLから読み込む。グローバルの `Hitsumabushi` として利用できる。
+    URLの版を固定しているので、SDKが更新されてもこのゲームの動きは変わらない。
+  -->
+  <script src="https://milightpartner.jp/sdk/0.22.1/hitsumabushi-sdk.js"></script>
+  <!-- 3D描画（three.js）と物理演算（Rapier）も、版を固定して読み込む -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+        "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.21.0/dist/rapier.mjs"
+      }
+    }
+  </script>
+  <!--
+    ゲームの進行はふつうのスクリプトで、すぐに動かす（GAME_READY を3Dの読み込みを待たずに送るため）。
+    3D と物理演算は import() で後から読み込む。読み込めなかったときは、3Dなしで出目の列だけで進める。
+  -->
+  <script>
+    let THREE = null;
+    let RoundedBoxGeometry = null;
+    let RoomEnvironment = null;
+    let RAPIER = null;
+    // dice-physics.js（トレイの形・シミュレーション）
+    let P = null;
+
+    const DICE = 5;
+    const ALL_HELD = (1 << DICE) - 1;
+    const MAX_ROLLS = 3;
+    const UPPER_COUNT = 6;
+    const BONUS_NEED = 63;
+    const BONUS = 35;
+    const HEARTBEAT_MS = 3000;
+    // 手番の人が操作しないまま、この時間が経ったら、ホストが代わりに振る・記入する（離脱で止まらないように）
+    const TURN_TIMEOUT_MS = 30000;
+    // 直前の操作も時間切れだった人（離脱したと思われる人）は、待つ時間を短くする
+    const AWAY_TIMEOUT_MS = 8000;
+    // 誰も「終了」を押さなかったときに、ホストが自動で結果を報告するまでの時間
+    const AUTO_FINISH_MS = 25000;
+    const CPU_THINK_MS = 800;
+    const CPU_HOLD_MS = 700;
+    const CONFETTI_COLORS = ['#ff004c', '#ff9a00', '#ffe600', '#39ff14', '#00f0ff', '#7a5cff', '#ff00d4'];
+
+    // 役。上の6つ（エース〜シックス）の合計が63点以上で、ボーナス35点
+    const CATS = [
+      { name: 'エース', hint: '1の目の合計' },
+      { name: 'デュース', hint: '2の目の合計' },
+      { name: 'トレイ', hint: '3の目の合計' },
+      { name: 'フォー', hint: '4の目の合計' },
+      { name: 'ファイブ', hint: '5の目の合計' },
+      { name: 'シックス', hint: '6の目の合計' },
+      { name: 'チョイス', hint: '5つの合計' },
+      { name: 'フォーダイス', hint: '4つ同じで、5つの合計' },
+      { name: 'フルハウス', hint: '3つ＋2つで、5つの合計' },
+      { name: 'S.ストレート', hint: '4つ続きで15点' },
+      { name: 'B.ストレート', hint: '5つ続きで30点' },
+      { name: 'ヨット', hint: '5つ同じで50点' },
+    ];
+    const TURNS = CATS.length;
+
+    let myPlayerId = null;
+    let isSpectator = false;
+    let players = [];
+    let gameMasterId = null;
+
+    // 試合の状態。ホストだけが書き換え、STATE で全員に配る。
+    // log は操作の履歴：
+    //   振る   { k: 'r', p: order の何番目の人か, h: キープしたサイコロ（ビット）, v: 振ったあとの出目5つ（'31456' のような文字列）, s: 転がり方のシード }
+    //   記入   { k: 's', p, c: 役の番号 }
+    //   a: 1 は時間切れで自動で行ったもの
+    // hold は手番の人が今キープしているサイコロ（ビット。振るまでの間の表示用）
+    let state = null;
+    let receivedState = false;
+    // 演出を再生し終えた log の数。表示（得点表・手番）はここまでの結果で出す
+    let shownCount = 0;
+    let animating = false;
+    let matchToken = 0;
+    let pendingAction = false;
+    let finishRequested = false;
+    let resultShown = false;
+    let reported = false;
+    // 自分の番でキープしているサイコロ（ゲストの手元の値。ホストは state.hold を直接書き換える）
+    let myHold = 0;
+    // 記入する役として選んでいるもの
+    let selectedCat = null;
+
+    let heartbeatTimer = null;
+    let cpuTimer = null;
+    let turnTimer = null;
+    let autoFinishTimer = null;
+    let pendingTimer = null;
+
+    const els = {
+      gameCard: document.getElementById('gameCard'),
+      roundBadge: document.getElementById('roundBadge'),
+      playerList: document.getElementById('playerList'),
+      turnBanner: document.getElementById('turnBanner'),
+      stage: document.getElementById('stage'),
+      stageMsg: document.getElementById('stageMsg'),
+      handPop: document.getElementById('handPop'),
+      skipHint: document.getElementById('skipHint'),
+      diceStrip: document.getElementById('diceStrip'),
+      rollBtn: document.getElementById('rollBtn'),
+      scoreBtn: document.getElementById('scoreBtn'),
+      hint: document.getElementById('hint'),
+      sheet: document.getElementById('sheet'),
+      resultPanel: document.getElementById('resultPanel'),
+      resultList: document.getElementById('resultList'),
+      finishBtn: document.getElementById('finishBtn'),
+      finishHint: document.getElementById('finishHint'),
+      soundBtn: document.getElementById('soundBtn'),
+      fxLayer: document.getElementById('fxLayer'),
+    };
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    function popcount(m) {
+      let n = 0;
+      for (let i = 0; i < DICE; i++) if ((m >> i) & 1) n++;
+      return n;
+    }
+
+    // ---------- 役と得点 ----------
+
+    function counts(dice) {
+      const n = [0, 0, 0, 0, 0, 0, 0];
+      dice.forEach((v) => { n[v]++; });
+      return n;
+    }
+
+    function hasRun(n, from, len) {
+      for (let v = from; v < from + len; v++) if (!n[v]) return false;
+      return true;
+    }
+
+    // 出目 dice で役 c に記入したときの点
+    function scoreFor(c, dice) {
+      const n = counts(dice);
+      if (c < UPPER_COUNT) return (c + 1) * n[c + 1];
+      const sum = dice.reduce((a, b) => a + b, 0);
+      const max = Math.max(...n);
+      switch (c) {
+        case 6: return sum;
+        case 7: return max >= 4 ? sum : 0;
+        case 8: return max === 5 || (n.includes(3) && n.includes(2)) ? sum : 0;
+        case 9: return hasRun(n, 1, 4) || hasRun(n, 2, 4) || hasRun(n, 3, 4) ? 15 : 0;
+        case 10: return hasRun(n, 1, 5) || hasRun(n, 2, 5) ? 30 : 0;
+        case 11: return max === 5 ? 50 : 0;
+        default: return 0;
+      }
+    }
+
+    function upperSum(sheet) {
+      let s = 0;
+      for (let c = 0; c < UPPER_COUNT; c++) s += sheet[c] || 0;
+      return s;
+    }
+
+    function totalOf(sheet) {
+      const upper = upperSum(sheet);
+      let s = upper + (upper >= BONUS_NEED ? BONUS : 0);
+      for (let c = UPPER_COUNT; c < TURNS; c++) s += sheet[c] || 0;
+      return s;
+    }
+
+    // 出目の見どころ（振った直後に大きく出す）
+    function comboOf(dice) {
+      const n = counts(dice);
+      const max = Math.max(...n);
+      if (max === 5) return { kind: 'yacht', name: 'ヨット！' };
+      if (hasRun(n, 1, 5) || hasRun(n, 2, 5)) return { kind: 'bstraight', name: 'B.ストレート！' };
+      if (max === 4) return { kind: 'fourdice', name: 'フォーダイス！' };
+      if (n.includes(3) && n.includes(2)) return { kind: 'fullhouse', name: 'フルハウス！' };
+      if (hasRun(n, 1, 4) || hasRun(n, 2, 4) || hasRun(n, 3, 4)) return { kind: 'sstraight', name: 'S.ストレート！' };
+      return null;
+    }
+
+    function diceOf(e) { return [...e.v].map(Number); }
+
+    // log の履歴から、各人の得点表・いまの出目・いまの手番を求める
+    function derive(log) {
+      const sheets = {};
+      state.order.forEach((id) => { sheets[id] = new Array(TURNS).fill(null); });
+      let dice = null;
+      let rolls = 0;
+      let scored = 0;
+      for (const e of log) {
+        const pid = state.order[e.p];
+        if (e.k === 'r') {
+          dice = diceOf(e);
+          rolls++;
+        } else {
+          sheets[pid][e.c] = scoreFor(e.c, dice);
+          scored++;
+          rolls = 0;
+        }
+      }
+      const n = state.order.length;
+      const current = scored >= TURNS * n ? null : {
+        playerId: state.order[scored % n],
+        turn: Math.floor(scored / n),
+        rolls,
+      };
+      return { sheets, dice, current };
+    }
+
+    function isOver(d) { return !!state && d.current === null; }
+
+    function isCpuId(playerId) {
+      const p = players.find((pl) => pl.id === playerId);
+      return !!(p && p.isCpu);
+    }
+
+    function playerById(id) { return players.find((p) => p.id === id); }
+
+    function nameHtml(id) {
+      const p = playerById(id);
+      if (!p) return '?';
+      return `<span style="color:${p.color || '#00f0ff'};font-weight:700">${escapeHtml(p.name)}</span>${id === myPlayerId ? '（あなた）' : ''}${p.isCpu ? ' 🤖' : ''}`;
+    }
+
+    // ---------- CPU（と時間切れのときの代わりの操作） ----------
+
+    // 役ごとの「並の点」。これより高く取れれば得、低ければ損として、どの役に記入するか・何をキープするかを決める
+    const PAR = [2, 5, 8, 11, 14, 17, 22, 13, 15, 11, 18, 10];
+
+    function utility(c, dice) {
+      const s = scoreFor(c, dice);
+      let u = s - PAR[c];
+      // 上の役は、3つ以上そろえる（ボーナスの目安）と少し得
+      if (c < UPPER_COUNT && s >= (c + 1) * 3) u += 3;
+      return u;
+    }
+
+    function bestCategory(dice, sheet) {
+      let best = -1;
+      let bestU = -Infinity;
+      for (let c = 0; c < TURNS; c++) {
+        if (sheet[c] !== null) continue;
+        const u = utility(c, dice);
+        if (u > bestU) { bestU = u; best = c; }
+      }
+      return { c: best, u: bestU };
+    }
+
+    // k 個のサイコロを振ったときの出目の組み合わせ（順不同）と、その出やすさ
+    const OUTCOMES = (() => {
+      const fact = [1, 1, 2, 6, 24, 120];
+      const out = [];
+      for (let k = 0; k <= DICE; k++) {
+        const list = [];
+        const rec = (start, cur) => {
+          if (cur.length === k) {
+            const n = counts(cur);
+            let w = fact[k];
+            for (let v = 1; v <= 6; v++) w /= fact[n[v]];
+            list.push({ dice: cur.slice(), p: w / Math.pow(6, k) });
+            return;
+          }
+          for (let v = start; v <= 6; v++) { cur.push(v); rec(v, cur); cur.pop(); }
+        };
+        rec(1, []);
+        out.push(list);
+      }
+      return out;
+    })();
+
+    // いまの出目から、記入するか（score）、どれをキープして振り直すか（mask）を決める。
+    // 振り直したあとの出目を全部数えて、記入できる一番よい役の値の期待値をくらべる（1回先まで読む）
+    function aiPlan(dice, sheet, rollsLeft) {
+      const now = bestCategory(dice, sheet);
+      if (rollsLeft <= 0) return { score: now.c };
+      let bestMask = -1;
+      let bestE = -Infinity;
+      const seen = new Set();
+      for (let m = 0; m < ALL_HELD; m++) {
+        const kept = dice.filter((_, i) => (m >> i) & 1);
+        const key = kept.slice().sort().join('');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        let e = 0;
+        for (const o of OUTCOMES[DICE - kept.length]) {
+          e += o.p * bestCategory(kept.concat(o.dice), sheet).u;
+        }
+        if (e > bestE) { bestE = e; bestMask = m; }
+      }
+      if (now.u >= bestE) return { score: now.c };
+      return { mask: bestMask };
+    }
+
+    // ---------- 効果音（WebAudio で合成。音源ファイルは使わない） ----------
+
+    let soundOn = true;
+    try { soundOn = localStorage.getItem('five-dice-sound') !== 'off'; } catch (e) { /* 保存できない環境では毎回オン */ }
+    let audioCtx = null;
+    let noiseBuf = null;
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+        noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    }
+    document.addEventListener('pointerdown', ensureAudio);
+
+    function audioReady() { return soundOn && audioCtx && audioCtx.state === 'running'; }
+
+    function ping(freq, dur, gain, delay = 0, type = 'sine') {
+      const t0 = audioCtx.currentTime + delay;
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(gain, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(g).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.02);
+    }
+
+    function noise(dur, gain, type, freq, q = 1) {
+      const t0 = audioCtx.currentTime;
+      const src = audioCtx.createBufferSource();
+      src.buffer = noiseBuf;
+      const f = audioCtx.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      f.Q.value = q;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(gain, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f).connect(g).connect(audioCtx.destination);
+      src.start(t0);
+      src.stop(t0 + dur + 0.02);
+    }
+
+    // サイコロが当たった音。フェルト＝「トッ」、木の壁＝「コン」、サイコロどうし＝「カチ」
+    function hitSound(kind, mag) {
+      if (!audioReady()) return;
+      const v = Math.min(1, mag / 24);
+      if (kind === P.SOUND_WALL) {
+        ping(520 + Math.random() * 160, 0.09 + v * 0.06, 0.05 + v * 0.12);
+        ping(1300 + Math.random() * 200, 0.04, 0.02 + v * 0.04);
+        noise(0.03, 0.04 + v * 0.1, 'bandpass', 1400, 1.5);
+      } else if (kind === P.SOUND_DICE) {
+        noise(0.03, 0.06 + v * 0.14, 'bandpass', 3800, 2);
+        ping(4200 + Math.random() * 600, 0.04, 0.02 + v * 0.04);
+      } else {
+        noise(0.06, 0.07 + v * 0.18, 'lowpass', 500);
+        ping(150 + Math.random() * 40, 0.07, 0.03 + v * 0.06);
+      }
+    }
+
+    const sfx = {
+      hold(on) {
+        if (!audioReady()) return;
+        ping(on ? 880 : 660, 0.08, 0.06);
+        ping(on ? 1320 : 990, 0.06, 0.03, 0.04);
+      },
+      write(points) {
+        if (!audioReady()) return;
+        if (points > 0) {
+          [784, 1047, 1319].forEach((f, i) => ping(f, 0.22, 0.05, i * 0.07, 'triangle'));
+        } else {
+          [330, 262].forEach((f, i) => ping(f, 0.25, 0.05, i * 0.12, 'triangle'));
+        }
+      },
+      fanfare(kind) {
+        if (!audioReady()) return;
+        const chords = {
+          yacht: [523, 659, 784, 1047, 1319, 1568, 2093],
+          bstraight: [523, 659, 784, 1047, 1319],
+          bonus: [659, 784, 1047, 1319],
+          fourdice: [523, 659, 784, 1047],
+          fullhouse: [523, 659, 784, 1047],
+          sstraight: [587, 740, 880],
+        }[kind];
+        if (chords) chords.forEach((f, i) => ping(f, 0.3, 0.05, i * 0.06));
+      },
+    };
+
+    function renderSoundBtn() { els.soundBtn.textContent = soundOn ? '🔊' : '🔇'; }
+    els.soundBtn.addEventListener('click', () => {
+      soundOn = !soundOn;
+      try { localStorage.setItem('five-dice-sound', soundOn ? 'on' : 'off'); } catch (e) { /* 保存できなくても切り替えは効く */ }
+      renderSoundBtn();
+    });
+
+    // ---------- 3D（トレイ・キープ台・サイコロ） ----------
+
+    let renderer = null;
+    let scene = null;
+    let camera = null;
+    let raycaster = null;
+    let dice = [];
+    let slotGlows = [];
+    let physicsReady = null;
+    // ホストが探した投げの計算結果（再生時に計算し直さないため）。キーは「シード:振るサイコロの数」
+    const planCache = new Map();
+    // 3Dの読み込みが（成功・失敗のどちらかで）終わったか。終わるまでは振れない
+    let physicsSettled = false;
+
+    // 作業用の値（three を読み込んでから作る）
+    let tmpQ = null;
+    let tmpQ2 = null;
+    let rotMat = null;
+
+    function canvasTexture(w, h, draw) {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      draw(c.getContext('2d'), w, h);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      return tex;
+    }
+
+    // 卓のフェルト。紺の起毛に、ネオンの線とロゴをうっすら
+    function feltTexture() {
+      const { hx, hz } = P.TRAY;
+      return canvasTexture(1024, Math.round(1024 * hz / hx), (g, w, h) => {
+        g.fillStyle = '#142a4a';
+        g.fillRect(0, 0, w, h);
+        const img = g.getImageData(0, 0, w, h);
+        for (let i = 0; i < img.data.length; i += 4) {
+          const n = (Math.random() - 0.5) * 18;
+          img.data[i] += n;
+          img.data[i + 1] += n;
+          img.data[i + 2] += n;
+        }
+        g.putImageData(img, 0, 0);
+        const grad = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.6);
+        grad.addColorStop(0, 'rgba(0, 240, 255, 0.10)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0.35)');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, w, h);
+        g.strokeStyle = 'rgba(0, 240, 255, 0.28)';
+        g.lineWidth = 3;
+        g.strokeRect(26, 26, w - 52, h - 52);
+        g.strokeStyle = 'rgba(255, 0, 127, 0.18)';
+        g.lineWidth = 2;
+        g.strokeRect(38, 38, w - 76, h - 76);
+        g.font = `900 ${Math.round(h * 0.2)}px "Segoe UI", sans-serif`;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillStyle = 'rgba(0, 240, 255, 0.10)';
+        g.fillText('FIVE DICE', w / 2, h / 2);
+      });
+    }
+
+    // 木目（トレイの枠とキープ台）
+    function woodTexture() {
+      return canvasTexture(512, 128, (g, w, h) => {
+        g.fillStyle = '#4a2c18';
+        g.fillRect(0, 0, w, h);
+        for (let i = 0; i < 70; i++) {
+          const y = Math.random() * h;
+          g.strokeStyle = `rgba(${Math.random() < 0.5 ? '30, 15, 6' : '120, 78, 44'}, ${0.15 + Math.random() * 0.3})`;
+          g.lineWidth = 0.6 + Math.random() * 1.8;
+          g.beginPath();
+          g.moveTo(0, y);
+          for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x * 0.02 + i) * 2.5);
+          g.stroke();
+        }
+      });
+    }
+
+    const PIPS = {
+      1: [[0.5, 0.5]],
+      2: [[0.27, 0.27], [0.73, 0.73]],
+      3: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]],
+      4: [[0.27, 0.27], [0.73, 0.27], [0.27, 0.73], [0.73, 0.73]],
+      5: [[0.25, 0.25], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.75, 0.75]],
+      6: [[0.27, 0.22], [0.73, 0.22], [0.27, 0.5], [0.73, 0.5], [0.27, 0.78], [0.73, 0.78]],
+    };
+
+    function faceTexture(value) {
+      return canvasTexture(256, 256, (g) => {
+        g.fillStyle = '#f8f4ea';
+        g.fillRect(0, 0, 256, 256);
+        const r = value === 1 ? 46 : 22;
+        for (const [px, py] of PIPS[value]) {
+          const x = px * 256;
+          const y = py * 256;
+          // 彫り込んだ目に見えるよう、内側の上に影を落とす
+          const grad = g.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.1, x, y, r);
+          if (value === 1) {
+            grad.addColorStop(0, '#7a0010');
+            grad.addColorStop(0.75, '#d0102e');
+            grad.addColorStop(1, '#e8304a');
+          } else {
+            grad.addColorStop(0, '#000');
+            grad.addColorStop(0.8, '#1a1a1a');
+            grad.addColorStop(1, '#3a3a3a');
+          }
+          g.fillStyle = grad;
+          g.beginPath();
+          g.arc(x, y, r, 0, Math.PI * 2);
+          g.fill();
+        }
+      });
+    }
+
+    function buildScene() {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setClearColor(0x000000, 0);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+      els.stage.prepend(renderer.domElement);
+
+      tmpQ = new THREE.Quaternion();
+      tmpQ2 = new THREE.Quaternion();
+      rotMat = new THREE.Matrix4();
+      raycaster = new THREE.Raycaster();
+
+      scene = new THREE.Scene();
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      scene.environmentIntensity = 0.5;
+
+      camera = new THREE.PerspectiveCamera(34, 1, 0.1, 200);
+
+      scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x1a1a2a, 0.5));
+      const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+      sun.position.set(-5, 18, 8);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      sun.shadow.camera.left = -11;
+      sun.shadow.camera.right = 11;
+      sun.shadow.camera.top = 11;
+      sun.shadow.camera.bottom = -11;
+      sun.shadow.camera.near = 1;
+      sun.shadow.camera.far = 50;
+      sun.shadow.bias = -0.0005;
+      sun.shadow.radius = 4;
+      scene.add(sun);
+      // ネオンの色を木とサイコロに映す
+      const cyan = new THREE.PointLight(0x00f0ff, 50, 30, 1.6);
+      cyan.position.set(-8, 4, -1);
+      scene.add(cyan);
+      const magenta = new THREE.PointLight(0xff007f, 40, 30, 1.6);
+      magenta.position.set(8, 4, -1);
+      scene.add(magenta);
+
+      // 卓：影だけを描く（背景は CSS。OBS の透過でもサイコロの影は残る）
+      const table = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.ShadowMaterial({ opacity: 0.45 }));
+      table.rotation.x = -Math.PI / 2;
+      table.position.y = P.TABLE_Y;
+      table.receiveShadow = true;
+      scene.add(table);
+
+      const { hx, hz, wall, height, base } = P.TRAY;
+      const wood = new THREE.MeshPhysicalMaterial({ map: woodTexture(), roughness: 0.45, clearcoat: 0.8, clearcoatRoughness: 0.25 });
+      const felt = new THREE.MeshStandardMaterial({ map: feltTexture(), roughness: 0.95 });
+
+      // 床（上の面だけフェルト）
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, base, hz * 2), [wood, wood, felt, wood, wood, wood]);
+      floor.position.y = -base / 2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+      // 枠
+      const wallH = height + base;
+      const walls = [
+        [wall, (hz + wall) * 2, hx + wall / 2, 0],
+        [wall, (hz + wall) * 2, -(hx + wall / 2), 0],
+        [hx * 2, wall, 0, hz + wall / 2],
+        [hx * 2, wall, 0, -(hz + wall / 2)],
+      ];
+      for (const [sx, sz, x, z] of walls) {
+        const m = new THREE.Mesh(new RoundedBoxGeometry(sx, wallH, sz, 3, 0.08), wood);
+        m.position.set(x, -base + wallH / 2, z);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        scene.add(m);
+      }
+      // 枠の上のネオンの線
+      const neon = new THREE.MeshBasicMaterial({ color: 0x00f0ff, toneMapped: false });
+      const lines = [
+        [0.05, (hz + wall) * 2 - 0.1, hx + 0.04, 0],
+        [0.05, (hz + wall) * 2 - 0.1, -(hx + 0.04), 0],
+        [hx * 2 + 0.1, 0.05, 0, hz + 0.04],
+        [hx * 2 + 0.1, 0.05, 0, -(hz + 0.04)],
+      ];
+      for (const [sx, sz, x, z] of lines) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.04, sz), neon);
+        m.position.set(x, height + 0.02, z);
+        scene.add(m);
+      }
+
+      // キープ台
+      const rackW = P.RACK.slot * DICE + 0.4;
+      const rack = new THREE.Mesh(new RoundedBoxGeometry(rackW, P.RACK.top - P.TABLE_Y, 1.5, 3, 0.1), wood);
+      rack.position.set(0, (P.RACK.top + P.TABLE_Y) / 2, P.RACK.z);
+      rack.castShadow = true;
+      rack.receiveShadow = true;
+      scene.add(rack);
+      slotGlows = [];
+      for (let i = 0; i < DICE; i++) {
+        const [x, , z] = P.rackPos(i);
+        const glow = new THREE.Mesh(
+          new THREE.RingGeometry(0.66, 0.76, 40),
+          new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.18, toneMapped: false }),
+        );
+        glow.rotation.x = -Math.PI / 2;
+        glow.position.set(x, P.RACK.top + 0.01, z);
+        scene.add(glow);
+        slotGlows.push(glow);
+      }
+
+      // サイコロ。BoxGeometry の面の順（+x, -x, +y, -y, +z, -z）に、dice-physics.js の FACE_NORMALS と同じ目を貼る。
+      // 目の割り当ては体の向きに掛け合わせて持つ（userData.assign）。メッシュ自体は回さない
+      const geo = new RoundedBoxGeometry(P.DIE_SIZE, P.DIE_SIZE, P.DIE_SIZE, 4, 0.1 * P.DIE_SIZE);
+      const mats = [3, 4, 1, 6, 2, 5].map((v) => new THREE.MeshPhysicalMaterial({
+        map: faceTexture(v),
+        roughness: 0.32,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.2,
+      }));
+      dice = [];
+      for (let i = 0; i < DICE; i++) {
+        const mesh = new THREE.Mesh(geo, mats);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData.index = i;
+        mesh.userData.assign = new THREE.Quaternion();
+        mesh.userData.onRack = false;
+        scene.add(mesh);
+        dice.push(mesh);
+      }
+      // 最初は 1〜5 の目を並べておく
+      trayPoses = dice.map((_, i) => restPose([(i - 2) * 1.7, P.DIE_SIZE / 2, (i % 2) * 0.9 - 0.45], i + 1, i * 0.45 - 0.9));
+      trayPoses.forEach((pose, i) => { dice[i].position.copy(pose.pos); dice[i].quaternion.copy(pose.q); });
+
+      new ResizeObserver(fitView).observe(els.stage);
+      fitView();
+      requestRender();
+    }
+
+    // ステージの縦横比に合わせて、トレイとキープ台が収まるようにカメラを引く
+    function fitView() {
+      if (!renderer) return;
+      const w = els.stage.clientWidth;
+      const h = els.stage.clientHeight;
+      if (w === 0 || h === 0) return;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
+      const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+      const dist = Math.max(6.0 / Math.tan(hHalf), 5.1 / Math.tan(vHalf));
+      const target = new THREE.Vector3(0, 0, 0.9);
+      const dir = new THREE.Vector3(0, 0.9, 0.42).normalize();
+      camera.position.copy(dir.multiplyScalar(dist)).add(target);
+      camera.lookAt(target);
+      camera.updateProjectionMatrix();
+      requestRender();
+    }
+
+    let renderQueued = false;
+    function requestRender() {
+      if (renderQueued || !renderer) return;
+      renderQueued = true;
+      requestAnimationFrame(() => {
+        renderQueued = false;
+        renderer.render(scene, camera);
+      });
+    }
+
+    // three・Rapier・dice-physics.js を読み込んで、トレイを出す。
+    // 失敗したら 3D なしで進める（出目は下の列に出る）。結果は true（3Dあり）/ false（3Dなし）
+    physicsReady = (async () => {
+      try {
+        const [three, rounded, room, rapier, physics] = await Promise.all([
+          import('three'),
+          import('three/addons/geometries/RoundedBoxGeometry.js'),
+          import('three/addons/environments/RoomEnvironment.js'),
+          import('@dimforge/rapier3d-compat'),
+          import('./dice-physics.js'),
+        ]);
+        THREE = three;
+        RoundedBoxGeometry = rounded.RoundedBoxGeometry;
+        RoomEnvironment = room.RoomEnvironment;
+        RAPIER = rapier.default;
+        P = physics;
+        await RAPIER.init();
+        buildScene();
+        els.stageMsg.hidden = true;
+        return true;
+      } catch (e) {
+        console.error(e);
+        els.stageMsg.textContent = '3D表示を準備できませんでした（下の出目の列で遊べます）';
+        return false;
+      } finally {
+        physicsSettled = true;
+      }
+    })();
+
+    // ---------- サイコロの置き場所（トレイの中・キープ台） ----------
+
+    // トレイで止まっている位置と向き（キープから戻すときに使う）。value はそのとき上を向いている目
+    let trayPoses = [];
+
+    // 目 value を真上に向けた向き（yaw だけ回す）
+    function uprightQuat(value, yaw) {
+      const m = P.rotationForValue([0, 1, 0], value, 0);
+      rotMat.set(m[0], m[1], m[2], 0, m[3], m[4], m[5], 0, m[6], m[7], m[8], 0, 0, 0, 0, 1);
+      const q = new THREE.Quaternion().setFromRotationMatrix(rotMat);
+      return new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiply(q);
+    }
+
+    function restPose(pos, value, yaw) {
+      return { pos: new THREE.Vector3(...pos), q: uprightQuat(value, yaw), value };
+    }
+
+    function rackPose(i, value) {
+      return { pos: new THREE.Vector3(...P.rackPos(i)), q: uprightQuat(value, 0) };
+    }
+
+    // サイコロをいまの位置から目的の位置へ、少し持ち上げながら動かす
+    function tweenDice(moves, ms) {
+      if (!renderer || moves.length === 0) return Promise.resolve();
+      const from = moves.map((m) => ({ pos: dice[m.i].position.clone(), q: dice[m.i].quaternion.clone() }));
+      if (ms <= 0) {
+        moves.forEach((m) => { dice[m.i].position.copy(m.pos); dice[m.i].quaternion.copy(m.q); });
+        requestRender();
+        return Promise.resolve();
+      }
+      const token = matchToken;
+      return new Promise((resolve) => {
+        const t0 = performance.now();
+        const tick = (now) => {
+          if (token !== matchToken) { resolve(); return; }
+          const t = Math.min(1, (now - t0) / ms);
+          const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          moves.forEach((m, k) => {
+            const d = dice[m.i];
+            d.position.lerpVectors(from[k].pos, m.pos, e);
+            d.position.y += Math.sin(Math.PI * t) * (m.lift || 0);
+            d.quaternion.slerpQuaternions(from[k].q, m.q, e);
+          });
+          renderer.render(scene, camera);
+          if (t >= 1) { resolve(); return; }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    }
+
+    // キープしたサイコロは台へ、それ以外はトレイの止まっていた場所へ。
+    // heldOnly のときはキープしたものだけ動かす（残りはこのあと投げるので、トレイに戻さない）
+    function placeDice(mask, values, ms, heldOnly = false) {
+      if (!renderer) return Promise.resolve();
+      const moves = [];
+      for (let i = 0; i < DICE; i++) {
+        const held = !!((mask >> i) & 1);
+        slotGlows[i].material.opacity = held ? 0.95 : 0.18;
+        if (heldOnly && !held) continue;
+        if (dice[i].userData.onRack === held && ms > 0) continue;
+        dice[i].userData.onRack = held;
+        const v = values ? values[i] : trayPoses[i].value;
+        if (held) {
+          moves.push({ i, ...rackPose(i, v), lift: 1.2 });
+        } else {
+          // 途中から入ったときなど、トレイの記録と出目が合わなければ、その場で目を上に向け直す
+          if (trayPoses[i].value !== v) trayPoses[i] = restPose(trayPoses[i].pos.toArray(), v, i * 0.4);
+          moves.push({ i, pos: trayPoses[i].pos, q: trayPoses[i].q, lift: 1.2 });
+        }
+      }
+      return tweenDice(moves, ms);
+    }
+
+    // ---------- 投げの再生 ----------
+
+    // シミュレーション結果に合わせて、止まったとき上を向く面に出目が来るよう、目の割り当てを決める
+    function assignFaces(sim, idx, values, seed) {
+      const pick = P.mulberry32(seed ^ 0x5bd1e995);
+      sim.finals.forEach((f, j) => {
+        const m = P.rotationForValue(f.axis, values[idx[j]], pick());
+        rotMat.set(m[0], m[1], m[2], 0, m[3], m[4], m[5], 0, m[6], m[7], m[8], 0, 0, 0, 0, 1);
+        dice[idx[j]].userData.assign.setFromRotationMatrix(rotMat);
+      });
+    }
+
+    function framePose(f, k, outPos, outQ) {
+      const n = f.length / 7;
+      const kk = Math.min(k, n - 1);
+      const a = Math.floor(kk);
+      const b = Math.min(a + 1, n - 1);
+      const t = kk - a;
+      const A = a * 7;
+      const B = b * 7;
+      outPos.set(
+        f[A] + (f[B] - f[A]) * t,
+        f[A + 1] + (f[B + 1] - f[A + 1]) * t,
+        f[A + 2] + (f[B + 2] - f[A + 2]) * t,
+      );
+      tmpQ.set(f[A + 3], f[A + 4], f[A + 5], f[A + 6]);
+      tmpQ2.set(f[B + 3], f[B + 4], f[B + 5], f[B + 6]);
+      outQ.slerpQuaternions(tmpQ, tmpQ2, t);
+    }
+
+    function poseAt(frames, idx, k) {
+      idx.forEach((i, j) => {
+        const d = dice[i];
+        framePose(frames[j], k, d.position, d.quaternion);
+        d.quaternion.multiply(d.userData.assign);
+      });
+    }
+
+    let skipRequested = false;
+
+    // 記録した動きを実時間で再生する。音は記録した衝突に合わせて鳴らす
+    function playback(sim, idx, token) {
+      const fps = P.STEP_HZ / P.FRAME_EVERY;
+      const total = sim.frames[0].length / 7 - 1;
+      const events = sim.events;
+      const lastHit = {};
+      let ev = 0;
+      skipRequested = false;
+      els.skipHint.hidden = false;
+      return new Promise((resolve) => {
+        const t0 = performance.now();
+        const tick = (now) => {
+          if (token !== matchToken) { resolve(); return; }
+          const t = (now - t0) / 1000;
+          const k = skipRequested ? total : t * fps;
+          poseAt(sim.frames, idx, k);
+          while (ev < events.length && events[ev].t <= t && !skipRequested) {
+            const e = events[ev++];
+            const key = `${e.die}-${e.kind}`;
+            if (e.mag > 1.5 && (!lastHit[key] || e.t - lastHit[key] > 0.05)) {
+              lastHit[key] = e.t;
+              hitSound(e.kind, e.mag);
+            }
+          }
+          renderer.render(scene, camera);
+          if (k >= total) {
+            els.skipHint.hidden = true;
+            resolve();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    }
+
+    // 止まった位置を、キープを外したときに戻す場所として覚える
+    function saveTrayPoses(idx, values) {
+      idx.forEach((i) => {
+        trayPoses[i] = { pos: dice[i].position.clone(), q: dice[i].quaternion.clone(), value: values[i] };
+        dice[i].userData.onRack = false;
+      });
+    }
+
+    // ステージのタップ：再生中はスキップ、自分の番ならタップしたサイコロのキープを切り替える
+    els.stage.addEventListener('click', (e) => {
+      if (animating) { skipRequested = true; return; }
+      if (!renderer || !canHold()) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(ndc, camera);
+      const hit = raycaster.intersectObjects(dice, false)[0];
+      if (hit) toggleHold(hit.object.userData.index);
+    });
+
+    // ---------- 演出 ----------
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function showHandPop(kind, name, sub) {
+      els.handPop.className = `hand-pop k-${kind}`;
+      els.handPop.querySelector('.hp-name').textContent = name;
+      els.handPop.querySelector('.hp-sub').innerHTML = sub;
+      void els.handPop.offsetWidth;
+      els.handPop.classList.add('go');
+    }
+
+    function clearHandPop() { els.handPop.className = 'hand-pop'; }
+
+    function shakeCard() {
+      els.gameCard.classList.remove('shake');
+      void els.gameCard.offsetWidth;
+      els.gameCard.classList.add('shake');
+    }
+
+    function confetti(count) {
+      for (let i = 0; i < count; i++) {
+        const c = document.createElement('span');
+        const t = 1.6 + Math.random() * 1.6;
+        c.className = 'confetti';
+        c.style.cssText = `left:${Math.random() * 100}%;--c:${CONFETTI_COLORS[i % CONFETTI_COLORS.length]};--t:${t}s;--dx:${(Math.random() - 0.5) * 160}px;--rot:${Math.random() * 1080 - 540}deg;animation-delay:${Math.random() * 0.4}s`;
+        els.fxLayer.appendChild(c);
+        setTimeout(() => c.remove(), (t + 0.5) * 1000);
+      }
+    }
+
+    function vibrate(pattern) {
+      try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* 振動できない端末では何もしない */ }
+    }
+
+    function showDelta(id, d) {
+      if (!d) return;
+      const chip = els.playerList.querySelector(`[data-id="${CSS.escape(id)}"]`);
+      if (!chip) return;
+      const s = document.createElement('span');
+      s.className = 'delta';
+      s.textContent = `+${d}`;
+      chip.appendChild(s);
+      setTimeout(() => s.remove(), 1900);
+    }
+
+    // ---------- 描画 ----------
+
+    let justScored = null;
+
+    function shown() { return derive(state.log.slice(0, shownCount)); }
+
+    function pendingAnim() { return !!state && shownCount < state.log.length; }
+
+    function idle() { return !animating && !pendingAnim(); }
+
+    // 表示するキープ。自分の番のゲストは手元の値、それ以外はホストが配った値
+    function holdShown(d) {
+      const cur = d.current;
+      if (!cur || cur.rolls === 0) return 0;
+      if (cur.playerId === myPlayerId && !Hitsumabushi.isGameMaster()) return myHold;
+      return state.hold || 0;
+    }
+
+    function myTurnNow() {
+      if (isSpectator || !state || !idle() || pendingAction || !physicsSettled || reported) return null;
+      const d = derive(state.log);
+      return d.current && d.current.playerId === myPlayerId ? d : null;
+    }
+
+    function canHold() {
+      const d = myTurnNow();
+      return !!d && d.current.rolls > 0 && d.current.rolls < MAX_ROLLS;
+    }
+
+    const DIE_PIPS = {
+      1: [[50, 50]], 2: [[28, 28], [72, 72]], 3: [[26, 26], [50, 50], [74, 74]],
+      4: [[28, 28], [72, 28], [28, 72], [72, 72]], 5: [[26, 26], [74, 26], [50, 50], [26, 74], [74, 74]],
+      6: [[28, 24], [72, 24], [28, 50], [72, 50], [28, 76], [72, 76]],
+    };
+
+    function dieSvg(v, held) {
+      const pips = v ? DIE_PIPS[v].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${v === 1 ? 14 : 8.5}" fill="${v === 1 ? '#d0102e' : '#151515'}"/>`).join('') : '';
+      return `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="3" y="3" width="94" height="94" rx="18" fill="#f8f4ea" stroke="${held ? '#00f0ff' : 'rgba(0,0,0,0.25)'}" stroke-width="${held ? 7 : 3}"/>${pips}</svg>`;
+    }
+
+    function renderDiceStrip(d) {
+      const values = d && d.dice;
+      const mask = d ? holdShown(d) : 0;
+      const hold = canHold();
+      let html = '';
+      for (let i = 0; i < DICE; i++) {
+        const held = !!((mask >> i) & 1);
+        const v = values ? values[i] : 0;
+        html += `<button class="die-btn${held ? ' held' : ''}${v ? '' : ' blank'}" data-i="${i}" ${hold ? '' : 'disabled'} aria-label="${v ? `${v}の目` : 'まだ振っていない'}${held ? '（キープ中）' : ''}">${dieSvg(v, held)}<span class="keep">KEEP</span></button>`;
+      }
+      els.diceStrip.innerHTML = html;
+    }
+
+    els.diceStrip.addEventListener('click', (e) => {
+      const b = e.target.closest('.die-btn');
+      if (b) toggleHold(Number(b.dataset.i));
+    });
+
+    function renderSheet(d) {
+      const ids = state.order;
+      const cur = idle() ? d.current : null;
+      const pickable = !!cur && cur.rolls > 0 && !!d.dice;
+      const head = `<thead><tr><th class="cat">役</th>${ids.map((id) => {
+        const p = playerById(id);
+        return `<th class="${cur && cur.playerId === id ? 'cur' : ''}" style="--pc:${(p && p.color) || '#00f0ff'}" title="${escapeHtml(p ? p.name : '?')}">${escapeHtml(p ? p.name : '?')}${id === myPlayerId ? '<small>あなた</small>' : p && p.isCpu ? '<small>CPU</small>' : ''}</th>`;
+      }).join('')}</tr></thead>`;
+
+      const cell = (id, c) => {
+        const v = d.sheets[id][c];
+        const just = justScored && justScored.id === id && justScored.c === c ? ' just' : '';
+        if (v !== null) return `<td class="v${just}">${v}</td>`;
+        if (pickable && cur.playerId === id) {
+          const pts = scoreFor(c, d.dice);
+          const mine = id === myPlayerId && !isSpectator && !!myTurnNow();
+          const sel = mine && selectedCat === c ? ' sel' : '';
+          return `<td class="v preview${pts === 0 ? ' zero' : ''}${mine ? ' pick' : ''}${sel}" data-c="${c}">${pts}</td>`;
+        }
+        return '<td class="v"></td>';
+      };
+      const catRow = (c, cls = '') => `<tr class="${cls}"><th class="cat" title="${CATS[c].hint}">${CATS[c].name}<span class="cat-hint">${CATS[c].hint}</span></th>${ids.map((id) => cell(id, c)).join('')}</tr>`;
+
+      let body = '';
+      for (let c = 0; c < UPPER_COUNT; c++) body += catRow(c);
+      body += `<tr class="sub"><th class="cat">小計</th>${ids.map((id) => `<td>${upperSum(d.sheets[id])}/${BONUS_NEED}</td>`).join('')}</tr>`;
+      body += `<tr class="sub"><th class="cat">ボーナス</th>${ids.map((id) => {
+        const s = d.sheets[id];
+        const upper = upperSum(s);
+        if (upper >= BONUS_NEED) return `<td class="got">+${BONUS}</td>`;
+        const done = s.slice(0, UPPER_COUNT).every((v) => v !== null);
+        return `<td>${done ? '0' : ''}</td>`;
+      }).join('')}</tr>`;
+      for (let c = UPPER_COUNT; c < TURNS; c++) body += catRow(c, c === UPPER_COUNT ? 'lower-start' : '');
+      body += `<tr class="total"><th class="cat">合計</th>${ids.map((id) => `<td>${totalOf(d.sheets[id])}</td>`).join('')}</tr>`;
+      els.sheet.innerHTML = head + `<tbody>${body}</tbody>`;
+    }
+
+    // 役のマスをタップで選ぶ。選んだマスをもう一度タップすると記入する
+    els.sheet.addEventListener('click', (e) => {
+      const td = e.target.closest('td.pick');
+      if (!td) return;
+      const c = Number(td.dataset.c);
+      if (selectedCat === c) {
+        requestScore();
+        return;
+      }
+      selectedCat = c;
+      renderAll();
+    });
+
+    function renderBoard(d) {
+      const cur = idle() ? d.current : null;
+      const turn = d.current ? d.current.turn : TURNS - 1;
+      els.roundBadge.innerHTML = `<span class="rb-label">ターン </span><strong>${turn + 1}</strong>/${TURNS}`;
+      els.playerList.innerHTML = state.order.map((id) => {
+        const p = playerById(id);
+        if (!p) return '';
+        return `<div class="player-chip ${cur && cur.playerId === id ? 'current' : ''}" data-id="${escapeHtml(id)}" style="--pc:${p.color || '#00f0ff'}">
+          <span class="chip-name">${escapeHtml(p.name)}${id === myPlayerId ? '（あなた）' : ''}${p.isCpu ? ' 🤖' : ''}</span>
+          <span class="chip-score">${totalOf(d.sheets[id])}点</span>
+        </div>`;
+      }).join('');
+      if (!animating && !resultShown && cur) {
+        const left = MAX_ROLLS - cur.rolls;
+        const tries = cur.rolls === 0 ? '' : left > 0 ? `（あと${left}回振れる）` : '（役を選んで記入）';
+        els.turnBanner.innerHTML = cur.playerId === myPlayerId
+          ? `<strong>あなたの番！</strong>${tries}`
+          : `${nameHtml(cur.playerId)} の番${tries}`;
+      }
+    }
+
+    function updateControls(d) {
+      const mine = myTurnNow();
+      const cur = mine && mine.current;
+      const mask = d ? holdShown(d) : 0;
+      els.rollBtn.disabled = !cur || cur.rolls >= MAX_ROLLS || mask === ALL_HELD;
+      els.rollBtn.textContent = cur && cur.rolls > 0
+        ? (cur.rolls >= MAX_ROLLS ? '振り直しなし' : `振り直す（残り${MAX_ROLLS - cur.rolls}）`)
+        : '振る';
+      const canScore = !!cur && cur.rolls > 0 && selectedCat !== null && mine.sheets[myPlayerId][selectedCat] === null;
+      els.scoreBtn.disabled = !canScore;
+      els.scoreBtn.textContent = canScore ? `${CATS[selectedCat].name}に記入（${scoreFor(selectedCat, mine.dice)}点）` : '役を選んで記入';
+      els.stage.classList.toggle('can-hold', canHold());
+
+      if (isSpectator || !d || !d.current || resultShown) {
+        els.hint.textContent = '';
+      } else if (!cur) {
+        els.hint.textContent = d.current.playerId === myPlayerId ? '' : 'ほかの人の番です。得点表で様子を見よう';
+      } else if (cur.rolls === 0) {
+        els.hint.textContent = `「振る」でサイコロ5つを振る（${TURN_TIMEOUT_MS / 1000}秒で自動）`;
+      } else if (cur.rolls < MAX_ROLLS) {
+        els.hint.textContent = mask === ALL_HELD
+          ? '全部キープ中。得点表から役を選んで記入しよう'
+          : 'サイコロをタップでキープ → 振り直す。または得点表から役を選んで記入';
+      } else {
+        els.hint.textContent = '得点表から記入する役を選ぼう（選んだマスをもう一度タップでも記入）';
+      }
+    }
+
+    function renderAll() {
+      if (!state) {
+        els.playerList.innerHTML = '';
+        els.roundBadge.textContent = '';
+        els.sheet.innerHTML = '';
+        renderDiceStrip(null);
+        updateControls(null);
+        return;
+      }
+      const d = shown();
+      renderBoard(d);
+      renderSheet(d);
+      renderDiceStrip(d);
+      updateControls(d);
+    }
+
+    // ---------- 演出の再生（届いた操作を順番に） ----------
+
+    async function playEntry(e, index, fast) {
+      const token = matchToken;
+      const has3d = await physicsReady;
+      if (token !== matchToken) return;
+      const pid = state.order[e.p];
+      const before = derive(state.log.slice(0, index));
+      const after = derive(state.log.slice(0, index + 1));
+      clearHandPop();
+
+      if (e.k === 'r') {
+        els.turnBanner.innerHTML = `${nameHtml(pid)} が振った！${e.a ? '（時間切れ）' : ''}`;
+        const values = after.dice;
+        if (has3d) {
+          const idx = [];
+          for (let i = 0; i < DICE; i++) if (!((e.h >> i) & 1)) idx.push(i);
+          const key = `${e.s}:${idx.length}`;
+          const sim = planCache.get(key) || P.planThrow(RAPIER, e.s, idx.length).sim;
+          planCache.delete(key);
+          // キープしたものを台に置いてから、残りを投げる
+          await placeDice(e.h, before.dice || values, fast ? 0 : 260, true);
+          if (token !== matchToken) return;
+          assignFaces(sim, idx, values, e.s);
+          if (fast) {
+            poseAt(sim.frames, idx, Infinity);
+            requestRender();
+          } else {
+            // 投げる前の位置（トレイの右上）へ、サイコロを集める
+            const p0 = new THREE.Vector3();
+            const q0 = new THREE.Quaternion();
+            const gather = idx.map((i, j) => {
+              framePose(sim.frames[j], 0, p0, q0);
+              return { i, pos: p0.clone(), q: q0.clone().multiply(dice[i].userData.assign), lift: 0.6 };
+            });
+            await tweenDice(gather, 200);
+            if (token !== matchToken) return;
+            await playback(sim, idx, token);
+          }
+          if (token !== matchToken) return;
+          saveTrayPoses(idx, values);
+        } else if (!fast) {
+          await sleep(400);
+        }
+        if (token !== matchToken) return;
+        shownCount = Math.max(shownCount, index + 1);
+        renderAll();
+        if (fast) return;
+
+        const combo = comboOf(values);
+        if (combo) {
+          showHandPop(combo.kind, combo.name, nameHtml(pid));
+          sfx.fanfare(combo.kind);
+          if (combo.kind === 'yacht') { shakeCard(); confetti(110); if (pid === myPlayerId) vibrate([80, 60, 80, 60, 200]); }
+          else if (combo.kind === 'bstraight') { confetti(40); }
+          await sleep(combo.kind === 'yacht' ? 1500 : 900);
+        }
+        return;
+      }
+
+      // 記入
+      const pts = after.sheets[pid][e.c];
+      const gotBonus = upperSum(before.sheets[pid]) < BONUS_NEED && upperSum(after.sheets[pid]) >= BONUS_NEED;
+      shownCount = Math.max(shownCount, index + 1);
+      if (fast) {
+        await placeDice(0, after.dice, 0);
+        renderAll();
+        return;
+      }
+      selectedCat = null;
+      justScored = { id: pid, c: e.c };
+      renderAll();
+      justScored = null;
+      showHandPop(pts > 0 ? 'score' : 'zero', `${CATS[e.c].name} ${pts}点`, `${nameHtml(pid)}${e.a ? '（時間切れ）' : ''}`);
+      sfx.write(pts);
+      showDelta(pid, pts + (gotBonus ? BONUS : 0));
+      placeDice(0, after.dice, 260);
+      await sleep(1000);
+      if (token !== matchToken) return;
+      if (gotBonus) {
+        showHandPop('bonus', `ボーナス +${BONUS}点！`, `${nameHtml(pid)}　上の6つの合計が${BONUS_NEED}点を超えた`);
+        sfx.fanfare('bonus');
+        confetti(30);
+        await sleep(1300);
+      }
+    }
+
+    async function pump() {
+      if (animating) return;
+      animating = true;
+      const token = matchToken;
+      renderAll();
+      while (state && shownCount < state.log.length) {
+        const index = shownCount;
+        const backlog = state.log.length - index - 1;
+        await playEntry(state.log[index], index, backlog > 0);
+        if (token !== matchToken) return;
+        shownCount = Math.max(shownCount, index + 1);
+      }
+      animating = false;
+      onIdle();
+    }
+
+    function onIdle() {
+      renderAll();
+      if (!state) return;
+      const d = derive(state.log);
+      if (renderer) placeDice(holdShown(d), d.dice, 220);
+      if (isOver(d)) {
+        showResult();
+        return;
+      }
+      if (Hitsumabushi.isGameMaster()) {
+        scheduleCpu();
+        armTurnTimer();
+      }
+    }
+
+    // ---------- ホスト（試合の進行役）の処理 ----------
+
+    function randomInt(n) {
+      if (window.crypto && window.crypto.getRandomValues) {
+        return window.crypto.getRandomValues(new Uint32Array(1))[0] % n;
+      }
+      return Math.floor(Math.random() * n);
+    }
+
+    function broadcastState() {
+      if (reported || !state) return;
+      Hitsumabushi.sendGameData({ type: 'STATE', state });
+      Hitsumabushi.setMatchState(state);
+    }
+
+    let hostBusy = false;
+
+    function currentIs(playerId) {
+      const d = derive(state.log);
+      return d.current && d.current.playerId === playerId ? d : null;
+    }
+
+    // サイコロを振る。手番の人の分だけ受け付ける。
+    // 出目はここで決める。転がり方はホストが条件に合うシードを探して配り、各端末はそのシードで再現する
+    async function hostRoll(playerId, mask, auto) {
+      if (!state || reported || hostBusy) return;
+      const token = matchToken;
+      const d = currentIs(playerId);
+      if (!d || d.current.rolls >= MAX_ROLLS) return;
+      mask = d.current.rolls === 0 ? 0 : (mask & ALL_HELD);
+      if (mask === ALL_HELD) return;
+      hostBusy = true;
+      try {
+        const has3d = await physicsReady;
+        if (token !== matchToken) return;
+        const d2 = currentIs(playerId);
+        if (!d2 || d2.current.rolls !== d.current.rolls) return;
+        const prev = d2.dice || [1, 1, 1, 1, 1];
+        const values = prev.map((v, i) => ((mask >> i) & 1 ? v : 1 + randomInt(6)));
+        const count = DICE - popcount(mask);
+        // 3Dを読み込めなかったホストは、転がり方を探さずにシードだけ配る（ほかの端末が自分で探す）
+        let seed = randomInt(0x7fffffff);
+        if (has3d) {
+          const plan = P.planThrow(RAPIER, seed, count);
+          seed = plan.seed;
+          planCache.set(`${seed}:${count}`, plan.sim);
+        }
+        const e = { k: 'r', p: state.order.indexOf(playerId), h: mask, v: values.join(''), s: seed };
+        if (auto) e.a = 1;
+        state.log.push(e);
+        state.hold = mask;
+        clearTimeout(turnTimer);
+        turnTimer = null;
+        broadcastState();
+        pump();
+      } finally {
+        hostBusy = false;
+      }
+    }
+
+    function hostScore(playerId, c, auto) {
+      if (!state || reported || hostBusy) return;
+      const d = currentIs(playerId);
+      if (!d || d.current.rolls === 0 || !Number.isInteger(c) || c < 0 || c >= TURNS || d.sheets[playerId][c] !== null) return;
+      const e = { k: 's', p: state.order.indexOf(playerId), c };
+      if (auto) e.a = 1;
+      state.log.push(e);
+      state.hold = 0;
+      clearTimeout(turnTimer);
+      turnTimer = null;
+      broadcastState();
+      pump();
+    }
+
+    function hostSetHold(playerId, mask) {
+      if (!state || reported) return;
+      const d = currentIs(playerId);
+      if (!d || d.current.rolls === 0 || d.current.rolls >= MAX_ROLLS) return;
+      state.hold = mask & ALL_HELD;
+      broadcastState();
+      if (idle()) {
+        if (renderer) placeDice(state.hold, d.dice, 220);
+        renderAll();
+        armTurnTimer();
+      }
+    }
+
+    function scheduleCpu() {
+      if (cpuTimer || animating) return;
+      const d = derive(state.log);
+      const cur = d.current && d.current.playerId;
+      if (!cur || !isCpuId(cur)) return;
+      const token = matchToken;
+      cpuTimer = setTimeout(() => {
+        cpuTimer = null;
+        if (token !== matchToken || !idle()) return;
+        const now = currentIs(cur);
+        if (!now) return;
+        if (now.current.rolls === 0) { hostRoll(cur, 0, false); return; }
+        const plan = aiPlan(now.dice, now.sheets[cur], MAX_ROLLS - now.current.rolls);
+        if (plan.score !== undefined) { hostScore(cur, plan.score, false); return; }
+        if ((state.hold || 0) === plan.mask) { hostRoll(cur, plan.mask, false); return; }
+        // キープするサイコロを台に置いてみせてから振る
+        hostSetHold(cur, plan.mask);
+        cpuTimer = setTimeout(() => {
+          cpuTimer = null;
+          if (token !== matchToken) return;
+          hostRoll(cur, plan.mask, false);
+        }, CPU_HOLD_MS);
+      }, CPU_THINK_MS);
+    }
+
+    // 直前の操作が時間切れだった人は、離脱したとみなして待つ時間を短くする
+    function lastWasAuto(playerId) {
+      const p = state.order.indexOf(playerId);
+      for (let i = state.log.length - 1; i >= 0; i--) {
+        if (state.log[i].p === p) return !!state.log[i].a;
+      }
+      return false;
+    }
+
+    function armTurnTimer() {
+      clearTimeout(turnTimer);
+      turnTimer = null;
+      const d = derive(state.log);
+      const cur = d.current && d.current.playerId;
+      if (!cur || isCpuId(cur)) return;
+      const count = state.log.length;
+      turnTimer = setTimeout(() => {
+        turnTimer = null;
+        if (animating || state.log.length !== count) return;
+        const now = currentIs(cur);
+        if (!now) return;
+        if (now.current.rolls === 0) hostRoll(cur, 0, true);
+        else hostScore(cur, bestCategory(now.dice, now.sheets[cur]).c, true);
+      }, lastWasAuto(cur) ? AWAY_TIMEOUT_MS : TURN_TIMEOUT_MS);
+    }
+
+    function startHeartbeat() {
+      heartbeatTimer = setInterval(() => {
+        if (reported) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+          return;
+        }
+        broadcastState();
+      }, HEARTBEAT_MS);
+    }
+
+    // ---------- 操作 ----------
+
+    // ホストからの結果を待つあいだはボタンを押せなくする（届かなければ数秒で戻す）
+    function waitForHost() {
+      pendingAction = true;
+      clearTimeout(pendingTimer);
+      pendingTimer = setTimeout(() => { pendingAction = false; renderAll(); }, 5000);
+      renderAll();
+    }
+
+    function toggleHold(i) {
+      if (!canHold()) return;
+      ensureAudio();
+      const d = derive(state.log);
+      const mask = holdShown(d) ^ (1 << i);
+      sfx.hold(!!((mask >> i) & 1));
+      if (Hitsumabushi.isGameMaster()) {
+        hostSetHold(myPlayerId, mask);
+        return;
+      }
+      myHold = mask;
+      Hitsumabushi.sendGameData({ type: 'HOLD', m: mask });
+      if (renderer) placeDice(mask, d.dice, 220);
+      renderAll();
+    }
+
+    function requestRoll() {
+      const d = myTurnNow();
+      if (!d || d.current.rolls >= MAX_ROLLS) return;
+      ensureAudio();
+      const mask = holdShown(d);
+      if (mask === ALL_HELD) return;
+      selectedCat = null;
+      if (Hitsumabushi.isGameMaster()) {
+        hostRoll(myPlayerId, mask, false);
+        return;
+      }
+      waitForHost();
+      Hitsumabushi.sendGameData({ type: 'ROLL', m: mask });
+    }
+
+    function requestScore() {
+      const d = myTurnNow();
+      if (!d || d.current.rolls === 0 || selectedCat === null || d.sheets[myPlayerId][selectedCat] !== null) return;
+      ensureAudio();
+      const c = selectedCat;
+      if (Hitsumabushi.isGameMaster()) {
+        hostScore(myPlayerId, c, false);
+        return;
+      }
+      waitForHost();
+      Hitsumabushi.sendGameData({ type: 'SCORE', c });
+    }
+
+    els.rollBtn.addEventListener('click', requestRoll);
+    els.scoreBtn.addEventListener('click', requestScore);
+
+    // ---------- 結果 ----------
+
+    function finalScores() {
+      const { sheets } = derive(state.log);
+      const scores = {};
+      state.order.forEach((id) => { scores[id] = totalOf(sheets[id]); });
+      return { scores, sheets };
+    }
+
+    function rankedIds(scores) {
+      return state.order.slice().sort((a, b) => scores[b] - scores[a]);
+    }
+
+    function winnerIds(scores) {
+      const best = Math.max(...state.order.map((id) => scores[id]));
+      return state.order.filter((id) => scores[id] === best);
+    }
+
+    function showResult() {
+      if (resultShown) return;
+      resultShown = true;
+      const { scores } = finalScores();
+      const winners = winnerIds(scores);
+      els.resultList.innerHTML = rankedIds(scores).map((id, i) => {
+        const isWinner = winners.includes(id);
+        const medal = isWinner ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '　';
+        return `<div class="result-row ${isWinner ? 'winner' : ''}">
+          <span class="rank">${medal}</span>
+          <span class="name">${nameHtml(id)}</span>
+          <span class="points">${scores[id]}点</span>
+        </div>`;
+      }).join('');
+      els.resultPanel.classList.add('show');
+      els.turnBanner.innerHTML = winners.length > 1 ? '引き分け！' : `🏆 ${nameHtml(winners[0])} の勝ち！`;
+      els.finishBtn.hidden = isSpectator;
+      els.finishHint.textContent = `押さなくても${AUTO_FINISH_MS / 1000}秒後に自動で終了します`;
+      if (winners.includes(myPlayerId)) confetti(80);
+      if (Hitsumabushi.isGameMaster()) autoFinishTimer = setTimeout(finishMatch, AUTO_FINISH_MS);
+      if (finishRequested) finishMatch();
+      updateControls(shown());
+    }
+
+    // 「終了」：結果をポータルに報告する（ポータルの結果ダイアログが出る）
+    function finishMatch() {
+      if (reported) return;
+      if (!resultShown) {
+        // ホストの演出がまだ終わっていないときにゲストが押した。結果を出したらすぐに報告する
+        if (Hitsumabushi.isGameMaster()) finishRequested = true;
+        return;
+      }
+      if (Hitsumabushi.isGameMaster()) {
+        clearTimeout(autoFinishTimer);
+        autoFinishTimer = null;
+        // 報告の前に最後の状態を配る（報告したあとは SDK が送信を止める）
+        broadcastState();
+        reported = true;
+        reportGameOver();
+      } else {
+        Hitsumabushi.sendGameData({ type: 'FINISH' });
+      }
+      els.finishBtn.disabled = true;
+      els.finishHint.textContent = '終了しています…';
+    }
+
+    function reportGameOver() {
+      const { scores, sheets } = finalScores();
+      const winners = winnerIds(scores);
+      const stats = { sheets };
+      if (winners.length === 1) {
+        Hitsumabushi.sendGameOver({ winnerPlayerId: winners[0], rankings: rankedIds(scores), scores, stats });
+      } else {
+        Hitsumabushi.sendGameOver({ isTie: true, winnerPlayerId: null, scores, stats });
+      }
+    }
+
+    els.finishBtn.addEventListener('click', finishMatch);
+
+    // ---------- SDK ----------
+
+    function resetMatch() {
+      matchToken++;
+      planCache.clear();
+      animating = false;
+      skipRequested = false;
+      shownCount = 0;
+      receivedState = false;
+      pendingAction = false;
+      finishRequested = false;
+      resultShown = false;
+      reported = false;
+      myHold = 0;
+      selectedCat = null;
+      justScored = null;
+      [cpuTimer, turnTimer, autoFinishTimer, pendingTimer].forEach((t) => clearTimeout(t));
+      cpuTimer = turnTimer = autoFinishTimer = pendingTimer = null;
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+      els.fxLayer.innerHTML = '';
+      els.resultPanel.classList.remove('show');
+      els.resultList.innerHTML = '';
+      els.finishBtn.hidden = true;
+      els.finishBtn.disabled = false;
+      els.finishHint.textContent = '';
+      els.turnBanner.textContent = '';
+      els.skipHint.hidden = true;
+      clearHandPop();
+      if (renderer) {
+        dice.forEach((d) => { d.userData.onRack = false; });
+        placeDice(0, null, 0);
+      }
+    }
+
+    function isValidEntry(e, n) {
+      if (!e || !Number.isInteger(e.p) || e.p < 0 || e.p >= n) return false;
+      if (e.k === 'r') {
+        return Number.isInteger(e.h) && e.h >= 0 && e.h < ALL_HELD
+          && typeof e.v === 'string' && /^[1-6]{5}$/.test(e.v) && Number.isInteger(e.s);
+      }
+      return e.k === 's' && Number.isInteger(e.c) && e.c >= 0 && e.c < TURNS;
+    }
+
+    function isValidState(st) {
+      return st && Array.isArray(st.order) && Array.isArray(st.log)
+        && Number.isInteger(st.hold || 0) && st.log.every((e) => isValidEntry(e, st.order.length));
+    }
+
+    // ホストから届いた状態を受け取り、まだ見ていない操作の演出を再生する
+    function handleState(st, senderId) {
+      if (Hitsumabushi.isGameMaster() || senderId !== gameMasterId || players.length === 0) return;
+      if (!isValidState(st)) return;
+      if (state && st.log.length < state.log.length) return;
+      // 途中から入った人（観戦者・再接続）は、最後の1つだけ演出を見る
+      if (!receivedState && st.log.length > 1) shownCount = st.log.length - 1;
+      const changed = !receivedState || !state || st.log.length !== state.log.length;
+      // 定期送信で同じ状態が届いたときは描き直さない（押している途中のマスやボタンが作り直されないように）
+      const holdChanged = !!state && (st.hold || 0) !== (state.hold || 0);
+      receivedState = true;
+      state = st;
+      if (!changed && !holdChanged) return;
+      if (changed) {
+        // 自分の番のキープは、振るまでは手元の値を使う。操作が進んだらホストの値に合わせる
+        myHold = st.hold || 0;
+        pendingAction = false;
+        clearTimeout(pendingTimer);
+        selectedCat = null;
+      }
+      if (shownCount < state.log.length) {
+        pump();
+      } else if (!animating) {
+        onIdle();
+      }
+    }
+
+    Hitsumabushi.init({
+      onStartMatch(config) {
+        // ⚠️ onStartMatch はリマッチ時にも再度呼び出されるため、毎回内部状態を初期化する
+        myPlayerId = config.localPlayerId;
+        players = config.players || [];
+        gameMasterId = config.gameMasterId || null;
+        isSpectator = Hitsumabushi.isSpectator();
+        document.body.classList.toggle('spectating', isSpectator);
+        document.body.classList.toggle('transparent', !!config.isObsMode);
+
+        resetMatch();
+        state = null;
+        if (Hitsumabushi.isGameMaster()) {
+          // 手番の順は参加者の並び順。連戦では先頭を1人ずつずらす
+          const order = players.map((p) => p.id);
+          const shift = ((config.matchNumber || 1) - 1) % Math.max(order.length, 1);
+          state = { order: order.slice(shift).concat(order.slice(0, shift)), log: [], hold: 0 };
+          broadcastState();
+          startHeartbeat();
+          onIdle();
+        } else {
+          renderAll();
+        }
+      },
+      onMatchState(st) {
+        handleState(st, gameMasterId);
+      },
+      onObsModeChange(isObs) {
+        document.body.classList.toggle('transparent', isObs);
+      },
+      onGameData(payload, senderId) {
+        if (!payload || typeof payload !== 'object') return;
+        if (payload.type === 'STATE') {
+          handleState(payload.state, senderId);
+          return;
+        }
+        if (!Hitsumabushi.isGameMaster() || !players.some((p) => p.id === senderId && !p.isCpu)) return;
+        if (payload.type === 'ROLL') {
+          hostRoll(senderId, Number(payload.m) | 0, false);
+        } else if (payload.type === 'HOLD') {
+          hostSetHold(senderId, Number(payload.m) | 0);
+        } else if (payload.type === 'SCORE') {
+          hostScore(senderId, Number(payload.c), false);
+        } else if (payload.type === 'FINISH') {
+          // ゲストが「終了」を押した。結果を報告できるのはホストだけなので代わりに報告する
+          finishMatch();
+        }
+      },
+    });
+
+    // 3D の準備ができたら、待っていた操作を受け付ける
+    physicsReady.then(() => { if (!animating) onIdle(); });
+
+    renderSoundBtn();
+    renderAll();
+  </script>
+</body>
+</html>
