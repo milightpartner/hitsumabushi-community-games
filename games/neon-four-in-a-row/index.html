@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ネオン四目並べ</title>
+  <style>
+    :root {
+      --cyan: #00f0ff;
+      --magenta: #ff007f;
+      --yellow: #ffe600;
+      --lime: #39ff14;
+      --muted: #94a3b8;
+      --cell: 48px;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body { overscroll-behavior: none; }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      background-color: #0a0b10;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      /* 高さはポータルが決める。min-height だと中身に押し広げられ、はみ出す（#295） */
+      height: 100vh;
+      height: 100dvh;
+      padding: 8px;
+      overflow: hidden;
+      transition: background-color 0.3s;
+    }
+    body.transparent {
+      background-color: transparent !important;
+    }
+
+    /* ゲーム外枠カード */
+    .game-card {
+      background: rgba(22, 26, 42, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 240, 255, 0.35);
+      border-radius: 24px;
+      padding: 16px 20px;
+      box-shadow: 0 0 35px rgba(0, 240, 255, 0.18);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 560px;
+      max-width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    body.transparent .game-card {
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    /* プレイヤー対比バー */
+    .players-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding-right: 52px; /* ミュートボタンの分 */
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+    .player-box {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid transparent;
+      transition: all 0.3s ease;
+    }
+    .player-box.active.seat0 {
+      border-color: var(--cyan);
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+      background: rgba(0, 240, 255, 0.1);
+    }
+    .player-box.active.seat1 {
+      border-color: var(--magenta);
+      box-shadow: 0 0 15px rgba(255, 0, 127, 0.4);
+      background: rgba(255, 0, 127, 0.1);
+    }
+    .player-box .mini-disc {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+    }
+    .player-text {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .player-name {
+      font-size: 0.85rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .player-sub {
+      font-size: 0.7rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .vs-text {
+      font-size: 0.8rem;
+      font-weight: 900;
+      color: #64748b;
+      flex-shrink: 0;
+    }
+
+    .mute-btn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mute-btn:hover { border-color: var(--cyan); }
+
+    /* ターン・状態表示 */
+    .status-badge {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      padding: 4px 16px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.07);
+      letter-spacing: 0.5px;
+      text-align: center;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 0;
+    }
+
+    /* タイマーバー */
+    .timer-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+    .timer-bar {
+      height: 100%;
+      width: 100%;
+      background: var(--yellow);
+      box-shadow: 0 0 10px var(--yellow);
+    }
+
+    /* 盤面の入れ物。高さは flex が決める。min-height: 0 が無いと縮まずはみ出す */
+    .board-wrap {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* 実寸は fitBoard() が ResizeObserver で測って入れる（#295） */
+    .board-area {
+      position: relative;
+      touch-action: manipulation;
+    }
+    .preview-row {
+      position: relative;
+      height: var(--cell);
+      margin: 0 10px; /* .board の border + padding */
+    }
+    .preview-disc {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: var(--cell);
+      height: var(--cell);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.12s ease-out, opacity 0.15s;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .preview-disc.show { opacity: 0.75; }
+    .preview-disc .disc { animation: none; }
+    .board {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(7, var(--cell));
+      grid-template-rows: repeat(6, var(--cell));
+      padding: 8px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(20, 40, 90, 0.85), rgba(14, 24, 60, 0.9));
+      border: 2px solid rgba(0, 240, 255, 0.45);
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.25), inset 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+    .slot {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .slot::before {
+      content: '';
+      position: absolute;
+      width: 80%;
+      height: 80%;
+      border-radius: 50%;
+      background: rgba(5, 6, 12, 0.85);
+      box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.8);
+    }
+    body.transparent .slot::before { background: rgba(5, 6, 12, 0.55); }
+
+    .disc {
+      position: relative;
+      width: 80%;
+      height: 80%;
+      border-radius: 50%;
+      z-index: 1;
+    }
+    .disc.seat0, .mini-disc.seat0 {
+      background: radial-gradient(circle at 35% 30%, #a8fbff, var(--cyan) 45%, #008a99);
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.8), inset 0 -3px 6px rgba(0, 0, 0, 0.35);
+    }
+    .disc.seat1, .mini-disc.seat1 {
+      background: radial-gradient(circle at 35% 30%, #ffa3cf, var(--magenta) 45%, #990049);
+      box-shadow: 0 0 12px rgba(255, 0, 127, 0.8), inset 0 -3px 6px rgba(0, 0, 0, 0.35);
+    }
+    .disc.falling {
+      animation: drop var(--fall-ms, 300ms) cubic-bezier(0.55, 0, 1, 0.45), bounce 0.18s ease-out var(--fall-ms, 300ms);
+    }
+    @keyframes drop {
+      from { transform: translateY(var(--fall-from)); }
+      to { transform: translateY(0); }
+    }
+    @keyframes bounce {
+      0% { transform: translateY(0); }
+      40% { transform: translateY(-10%); }
+      100% { transform: translateY(0); }
+    }
+    .disc.last::after {
+      content: '';
+      position: absolute;
+      inset: 32%;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.75);
+    }
+    .disc.win {
+      box-shadow: 0 0 6px #fff, 0 0 22px var(--yellow), 0 0 40px var(--yellow);
+      outline: 3px solid var(--yellow);
+      outline-offset: 1px;
+      animation: winPulse 0.9s ease-in-out infinite alternate;
+    }
+    @keyframes winPulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.08); }
+    }
+
+    /* 列のタップ領域（列全体。盤面上の予告行も含む） */
+    .hit-layer {
+      position: absolute;
+      inset: 0 10px;
+      display: grid;
+      grid-template-columns: repeat(7, var(--cell));
+      z-index: 5;
+    }
+    .hit-col {
+      cursor: pointer;
+      border-radius: 10px;
+      transition: background 0.15s;
+    }
+    .board-area.can-play .hit-col.hover { background: rgba(255, 255, 255, 0.06); }
+    .board-area:not(.can-play) .hit-col { cursor: default; }
+    body.spectating .hit-layer { pointer-events: none; }
+
+    .footer-info {
+      margin-top: 8px;
+      font-size: 0.75rem;
+      color: #64748b;
+      letter-spacing: 0.5px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 640px), (max-height: 560px) {
+      .game-card { padding: 10px 10px; border-radius: 18px; }
+      .players-bar { margin-bottom: 6px; }
+      .player-box { padding: 6px 8px; }
+      .mute-btn { top: 10px; right: 10px; }
+      .status-badge { font-size: 0.85rem; margin-bottom: 6px; }
+      .footer-info { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="game-card">
+    <button class="mute-btn" id="muteBtn" type="button" title="音のオン・オフ" aria-label="音のオン・オフ">🔊</button>
+
+    <div class="players-bar">
+      <div class="player-box seat0" id="seatBox0">
+        <span class="mini-disc seat0"></span>
+        <span class="player-text">
+          <span class="player-name" id="seatName0">Player 1</span>
+          <span class="player-sub" id="seatSub0">先手</span>
+        </span>
+      </div>
+      <span class="vs-text">VS</span>
+      <div class="player-box seat1" id="seatBox1">
+        <span class="mini-disc seat1"></span>
+        <span class="player-text">
+          <span class="player-name" id="seatName1">Player 2</span>
+          <span class="player-sub" id="seatSub1">後手</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="status-badge" id="statusBadge">対戦の準備中…</div>
+
+    <div class="timer-container">
+      <div class="timer-bar" id="timerBar"></div>
+    </div>
+
+    <div class="board-wrap" id="boardWrap">
+      <div class="board-area" id="boardArea">
+        <div class="preview-row">
+          <div class="preview-disc" id="previewDisc"><div class="disc"></div></div>
+        </div>
+        <div class="board" id="board"></div>
+        <div class="hit-layer" id="hitLayer"></div>
+      </div>
+    </div>
+
+    <div class="footer-info">縦・横・斜めに4つ並べたら勝ち！ / 1手15秒</div>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/0.22.1/hitsumabushi-sdk.js"></script>
+  <script>
+    var COLS = 7;
+    var ROWS = 6;
+    var TURN_MS = 15000;          // 1手の持ち時間。過ぎたら進行役がランダムな列に落とす
+    var CPU_THINK_MS = 700;
+    var REPORT_DELAY_MS = 1800;   // 決着の演出を見せてからポータルに報告する
+    var HEARTBEAT_MS = 4000;      // 途中参加の観戦者向けに、変化がなくても状態を配り直す
+    var CPU_DEPTH = 5;
+
+    // ---------- 状態 ----------
+    // state = { order: [先手ID, 後手ID], moves: [列番号, ...] }
+    // 盤面は moves から毎回組み立てる。進行役だけが moves を伸ばし、全員に配る
+    var state = null;
+    var players = [];
+    var myPlayerId = null;
+    var gameMasterId = null;
+    var isSpectator = false;
+    var reported = false;
+    var pendingDrop = false;
+    var turnStartedAt = 0;
+    var renderedMoves = 0;
+    var hoverCol = -1;
+
+    var cpuTimer = null;
+    var turnTimer = null;
+    var reportTimer = null;
+    var pendingTimer = null;
+    var heartbeatTimer = null;
+    var timerRaf = null;
+
+    var els = {
+      boardWrap: document.getElementById('boardWrap'),
+      boardArea: document.getElementById('boardArea'),
+      board: document.getElementById('board'),
+      hitLayer: document.getElementById('hitLayer'),
+      previewDisc: document.getElementById('previewDisc'),
+      statusBadge: document.getElementById('statusBadge'),
+      timerBar: document.getElementById('timerBar'),
+      muteBtn: document.getElementById('muteBtn'),
+      seatBox: [document.getElementById('seatBox0'), document.getElementById('seatBox1')],
+      seatName: [document.getElementById('seatName0'), document.getElementById('seatName1')],
+      seatSub: [document.getElementById('seatSub0'), document.getElementById('seatSub1')]
+    };
+
+    // ---------- DOM構築（1回だけ） ----------
+    var slots = [];
+    for (var r = 0; r < ROWS; r++) {
+      for (var c = 0; c < COLS; c++) {
+        var slot = document.createElement('div');
+        slot.className = 'slot';
+        els.board.appendChild(slot);
+        slots.push(slot);
+      }
+    }
+    var hitCols = [];
+    for (var hc = 0; hc < COLS; hc++) {
+      var hit = document.createElement('div');
+      hit.className = 'hit-col';
+      hit.dataset.col = String(hc);
+      els.hitLayer.appendChild(hit);
+      hitCols.push(hit);
+    }
+
+    // ---------- 盤面の実測フィット（Issue #295 / ポータル制約 §2 ④） ----------
+    // 盤面は 7列 × (予告行1 + 6行)。親を実測して、セル1辺を整数pxで入れる
+    var BOARD_PAD = 8 * 2 + 2 * 2; // .board の padding と border
+
+    function fitBoard() {
+      var w = els.boardWrap.clientWidth;
+      var h = els.boardWrap.clientHeight;
+      // 非表示中や初期化前は 0 になる。抜けないと盤面が幅0のまま戻らなくなる
+      if (w <= 0 || h <= 0) return;
+      var cell = Math.floor(Math.min((w - BOARD_PAD) / COLS, (h - BOARD_PAD) / (ROWS + 1)));
+      cell = Math.max(cell, 20);
+      els.boardArea.style.setProperty('--cell', cell + 'px');
+      updatePreview();
+    }
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(fitBoard).observe(els.boardWrap);
+    }
+    window.addEventListener('resize', fitBoard);
+    fitBoard();
+
+    function cellPx() {
+      return parseFloat(getComputedStyle(els.boardArea).getPropertyValue('--cell')) || 48;
+    }
+
+    // ---------- ルール ----------
+    function idx(row, col) { return row * COLS + col; }
+
+    // 置いた石を通る4方向を数え、4つ以上つながっていればそのマスを返す
+    function lineThrough(board, row, col, seat) {
+      var dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+      var best = null;
+      for (var d = 0; d < dirs.length; d++) {
+        var dr = dirs[d][0], dc = dirs[d][1];
+        var cells = [idx(row, col)];
+        for (var sgn = -1; sgn <= 1; sgn += 2) {
+          var rr = row + dr * sgn, cc = col + dc * sgn;
+          while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && board[idx(rr, cc)] === seat) {
+            cells.push(idx(rr, cc));
+            rr += dr * sgn;
+            cc += dc * sgn;
+          }
+        }
+        if (cells.length >= 4) best = (best || []).concat(cells);
+      }
+      return best;
+    }
+
+    // moves から盤面を組み立てる。不正な手（満杯の列など）があれば null
+    function derive(moves) {
+      var board = new Array(ROWS * COLS).fill(-1);
+      var heights = new Array(COLS).fill(0);
+      var winner = -1;
+      var winCells = null;
+      var last = -1;
+      for (var i = 0; i < moves.length; i++) {
+        if (winner !== -1) return null; // 決着後の手
+        var col = moves[i];
+        if (!(col >= 0 && col < COLS) || heights[col] >= ROWS) return null;
+        var row = ROWS - 1 - heights[col];
+        var seat = i % 2;
+        board[idx(row, col)] = seat;
+        heights[col]++;
+        last = idx(row, col);
+        var line = lineThrough(board, row, col, seat);
+        if (line) {
+          winner = seat;
+          winCells = line;
+        }
+      }
+      var full = moves.length >= ROWS * COLS;
+      return {
+        board: board,
+        heights: heights,
+        winner: winner,
+        winCells: winCells,
+        last: last,
+        over: winner !== -1 || full,
+        turnSeat: moves.length % 2
+      };
+    }
+
+    function legalCols(heights) {
+      var out = [];
+      for (var c = 0; c < COLS; c++) if (heights[c] < ROWS) out.push(c);
+      return out;
+    }
+
+    // ---------- CPU（negamax + αβ） ----------
+    var SEARCH_ORDER = [3, 2, 4, 1, 5, 0, 6];
+    var WINDOWS = (function () {
+      var list = [];
+      var dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          for (var d = 0; d < dirs.length; d++) {
+            var er = r + dirs[d][0] * 3, ec = c + dirs[d][1] * 3;
+            if (er < 0 || er >= ROWS || ec < 0 || ec >= COLS) continue;
+            var w = [];
+            for (var k = 0; k < 4; k++) w.push(idx(r + dirs[d][0] * k, c + dirs[d][1] * k));
+            list.push(w);
+          }
+        }
+      }
+      return list;
+    })();
+
+    function evaluate(board, seat) {
+      var score = 0;
+      for (var r = 0; r < ROWS; r++) {
+        var v = board[idx(r, 3)];
+        if (v === seat) score += 3; else if (v === 1 - seat) score -= 3;
+      }
+      for (var i = 0; i < WINDOWS.length; i++) {
+        var w = WINDOWS[i], mine = 0, theirs = 0;
+        for (var k = 0; k < 4; k++) {
+          var x = board[w[k]];
+          if (x === seat) mine++; else if (x !== -1) theirs++;
+        }
+        if (mine && theirs) continue;
+        if (mine === 3) score += 5; else if (mine === 2) score += 2;
+        if (theirs === 3) score -= 4; else if (theirs === 2) score -= 1;
+      }
+      return score;
+    }
+
+    function negamax(board, heights, seat, depth, alpha, beta, ply) {
+      var any = false;
+      for (var i = 0; i < COLS; i++) {
+        var col = SEARCH_ORDER[i];
+        if (heights[col] >= ROWS) continue;
+        any = true;
+        var row = ROWS - 1 - heights[col];
+        board[idx(row, col)] = seat;
+        heights[col]++;
+        var score;
+        if (lineThrough(board, row, col, seat)) {
+          score = 100000 - ply; // 早く勝つほど高い
+        } else if (depth <= 1) {
+          score = evaluate(board, seat);
+        } else {
+          score = -negamax(board, heights, 1 - seat, depth - 1, -beta, -alpha, ply + 1);
+        }
+        heights[col]--;
+        board[idx(row, col)] = -1;
+        if (score > alpha) alpha = score;
+        if (alpha >= beta) break;
+      }
+      return any ? alpha : 0; // 満杯は引き分け
+    }
+
+    function chooseCpuMove(moves) {
+      var d = derive(moves);
+      var seat = d.turnSeat;
+      var board = d.board.slice();
+      var heights = d.heights.slice();
+      var bestScore = -Infinity;
+      var best = [];
+      var cols = legalCols(heights);
+      for (var i = 0; i < cols.length; i++) {
+        var col = cols[i];
+        var row = ROWS - 1 - heights[col];
+        board[idx(row, col)] = seat;
+        heights[col]++;
+        var score = lineThrough(board, row, col, seat)
+          ? 100000
+          : -negamax(board, heights, 1 - seat, CPU_DEPTH - 1, -Infinity, Infinity, 1);
+        heights[col]--;
+        board[idx(row, col)] = -1;
+        if (score > bestScore) { bestScore = score; best = [col]; }
+        else if (score === bestScore) best.push(col);
+      }
+      return best[Math.floor(Math.random() * best.length)];
+    }
+
+    // ---------- 音 ----------
+    var audioCtx = null;
+    var muted = false;
+    function ensureAudio() {
+      if (audioCtx) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return;
+      }
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    function tone(freq, startAt, dur, type, gain) {
+      if (!audioCtx || muted) return;
+      var t0 = audioCtx.currentTime + startAt;
+      var osc = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(gain || 0.15, t0);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      osc.connect(g).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur);
+    }
+    function playDropSound(delaySec) {
+      tone(180, delaySec, 0.12, 'triangle', 0.25);
+      tone(90, delaySec, 0.18, 'sine', 0.2);
+    }
+    function playWinSound() {
+      [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.35 + i * 0.1, 0.25, 'square', 0.07); });
+    }
+    els.muteBtn.addEventListener('click', function () {
+      muted = !muted;
+      els.muteBtn.textContent = muted ? '🔇' : '🔊';
+      ensureAudio();
+    });
+    document.addEventListener('pointerdown', ensureAudio, { once: true });
+
+    // ---------- 表示 ----------
+    function playerById(id) {
+      for (var i = 0; i < players.length; i++) if (players[i].id === id) return players[i];
+      return null;
+    }
+    function seatOrder() {
+      return state ? state.order : players.slice(0, 2).map(function (p) { return p.id; });
+    }
+    function seatName(seat) {
+      var p = playerById(seatOrder()[seat]);
+      return p ? (p.name || ('Player ' + (seat + 1))) : ('Player ' + (seat + 1));
+    }
+    function mySeat() {
+      return myPlayerId ? seatOrder().indexOf(myPlayerId) : -1;
+    }
+    function isCpuId(id) {
+      var p = playerById(id);
+      return !!(p && p.isCpu);
+    }
+    function seatColor(seat) { return seat === 0 ? '#00f0ff' : '#ff007f'; }
+
+    function renderPlayers() {
+      var order = seatOrder();
+      for (var s = 0; s < 2; s++) {
+        var p = playerById(order[s]);
+        els.seatName[s].textContent = seatName(s);
+        var sub = s === 0 ? '先手' : '後手';
+        if (order[s] && order[s] === myPlayerId) sub += '・あなた';
+        if (p && p.isCpu) sub += '・CPU 🤖';
+        els.seatSub[s].textContent = sub;
+      }
+    }
+
+    function canPlay() {
+      if (!state || reported || pendingDrop || isSpectator) return false;
+      if (Hitsumabushi.phase === 'over') return false;
+      var d = derive(state.moves);
+      if (!d || d.over) return false;
+      return state.order[d.turnSeat] === myPlayerId;
+    }
+
+    var winHighlightTimer = null;
+
+    function renderBoard(animate) {
+      var d = state ? derive(state.moves) : derive([]);
+      var newCount = state ? state.moves.length : 0;
+      // 新しく置かれた石だけ落とす（途中参加や取りこぼしの配り直しでは落とさない）
+      var dropIdx = animate && newCount === renderedMoves + 1 ? d.last : -1;
+      var fallMs = 0;
+
+      clearTimeout(winHighlightTimer);
+      for (var i = 0; i < slots.length; i++) {
+        var seat = d.board[i];
+        var slot = slots[i];
+        var disc = slot.firstChild;
+        if (seat === -1) {
+          if (disc) slot.removeChild(disc);
+          continue;
+        }
+        if (!disc) {
+          disc = document.createElement('div');
+          slot.appendChild(disc);
+        }
+        var cls = 'disc seat' + seat + (i === d.last ? ' last' : '');
+        if (i === dropIdx) {
+          // 予告行（盤面の上）から落とす。10px は .board の border + padding
+          var row = Math.floor(i / COLS);
+          fallMs = Math.round(180 + 45 * row);
+          disc.style.setProperty('--fall-from', -((row + 1) * cellPx() + 10) + 'px');
+          disc.style.setProperty('--fall-ms', fallMs + 'ms');
+          disc.className = cls;
+          void disc.offsetWidth; // アニメーションをやり直させる
+          disc.className = cls + ' falling';
+          playDropSound(fallMs / 1000);
+        } else {
+          // animationend を待たずに上書きする（裏タブなどで発火しないことがある）
+          disc.className = cls;
+        }
+      }
+      renderedMoves = newCount;
+
+      // 4つ並んだ石は、最後の石が着地してから光らせる
+      if (d.winCells) {
+        var cells = d.winCells;
+        var apply = function () {
+          cells.forEach(function (j) {
+            var el = slots[j].firstChild;
+            if (el) { el.classList.remove('falling'); el.classList.add('win'); }
+          });
+        };
+        if (fallMs) winHighlightTimer = setTimeout(apply, fallMs + 200);
+        else apply();
+      }
+    }
+
+    els.board.addEventListener('animationend', function (e) {
+      if (e.animationName === 'bounce') e.target.classList.remove('falling');
+    });
+
+    function renderStatus() {
+      var badge = els.statusBadge;
+      for (var s = 0; s < 2; s++) els.seatBox[s].classList.remove('active');
+      if (!state) {
+        badge.textContent = isSpectator ? '👀 観戦中：対戦の準備中…' : '対戦の準備中…';
+        badge.style.color = '#94a3b8';
+        return;
+      }
+      var d = derive(state.moves);
+      if (d.over) {
+        if (d.winner !== -1) {
+          var me = mySeat();
+          var text = d.winner === me ? '🎉 あなたの勝ち！' : '🏆 ' + seatName(d.winner) + ' の勝ち！';
+          if (me !== -1 && d.winner !== me) text = '😢 ' + seatName(d.winner) + ' の勝ち…';
+          badge.textContent = text;
+          badge.style.color = seatColor(d.winner);
+        } else {
+          badge.textContent = '🤝 盤面が埋まって引き分け！';
+          badge.style.color = '#ffe600';
+        }
+        return;
+      }
+      var seat = d.turnSeat;
+      els.seatBox[seat].classList.add('active');
+      var id = state.order[seat];
+      if (isSpectator || !myPlayerId) {
+        badge.textContent = '👀 観戦中：' + seatName(seat) + ' の番';
+        badge.style.color = seatColor(seat);
+      } else if (id === myPlayerId) {
+        badge.textContent = 'あなたの番です（列をタップ）';
+        badge.style.color = seatColor(seat);
+      } else {
+        badge.textContent = seatName(seat) + (isCpuId(id) ? ' が考え中…' : ' の番');
+        badge.style.color = '#94a3b8';
+      }
+    }
+
+    function updatePreview() {
+      var playable = canPlay();
+      els.boardArea.classList.toggle('can-play', playable);
+      for (var c = 0; c < COLS; c++) hitCols[c].classList.toggle('hover', playable && c === hoverCol);
+      var show = playable && hoverCol >= 0;
+      if (show) {
+        var d = derive(state.moves);
+        if (d.heights[hoverCol] >= ROWS) show = false;
+      }
+      els.previewDisc.classList.toggle('show', show);
+      if (show) {
+        els.previewDisc.firstChild.className = 'disc seat' + mySeat();
+        els.previewDisc.style.transform = 'translateX(' + (hoverCol * cellPx()) + 'px)';
+      }
+    }
+
+    function tickTimer() {
+      cancelAnimationFrame(timerRaf);
+      var d = state && derive(state.moves);
+      if (!d || d.over || reported) {
+        els.timerBar.style.width = '0%';
+        return;
+      }
+      var left = Math.max(0, TURN_MS - (Date.now() - turnStartedAt));
+      els.timerBar.style.width = (left / TURN_MS * 100) + '%';
+      var color = left <= 5000 ? '#ff0055' : seatColor(d.turnSeat);
+      els.timerBar.style.backgroundColor = color;
+      els.timerBar.style.boxShadow = '0 0 10px ' + color;
+      timerRaf = requestAnimationFrame(tickTimer);
+    }
+
+    function renderAll(animate) {
+      renderPlayers();
+      renderBoard(animate);
+      renderStatus();
+      updatePreview();
+      tickTimer();
+    }
+
+    // ---------- 操作 ----------
+    function colFromEvent(e) {
+      var t = e.target;
+      if (t && t.dataset && t.dataset.col !== undefined) return parseInt(t.dataset.col, 10);
+      return -1;
+    }
+    els.hitLayer.addEventListener('pointermove', function (e) {
+      var c = colFromEvent(e);
+      if (c !== hoverCol) { hoverCol = c; updatePreview(); }
+    });
+    els.hitLayer.addEventListener('pointerleave', function () {
+      hoverCol = -1;
+      updatePreview();
+    });
+    els.hitLayer.addEventListener('click', function (e) {
+      var c = colFromEvent(e);
+      if (c >= 0) requestDrop(c);
+    });
+    document.addEventListener('keydown', function (e) {
+      var n = parseInt(e.key, 10);
+      if (n >= 1 && n <= COLS) requestDrop(n - 1);
+    });
+
+    function requestDrop(col) {
+      if (!canPlay()) return;
+      var d = derive(state.moves);
+      if (d.heights[col] >= ROWS) return;
+      ensureAudio();
+      if (Hitsumabushi.isGameMaster()) {
+        hostApplyMove(myPlayerId, col, state.moves.length);
+        return;
+      }
+      // 進行役からの結果を待つあいだは押せなくする（届かなければ数秒で戻す）
+      pendingDrop = true;
+      clearTimeout(pendingTimer);
+      pendingTimer = setTimeout(function () { pendingDrop = false; updatePreview(); }, 4000);
+      updatePreview();
+      Hitsumabushi.sendGameData({ type: 'DROP', col: col, n: state.moves.length });
+    }
+
+    // ---------- 進行役（Game Master）の処理 ----------
+    function broadcastState() {
+      if (reported || !state) return;
+      Hitsumabushi.sendGameData({ type: 'STATE', state: state });
+      Hitsumabushi.setMatchState(state);
+    }
+
+    // 手番の人の手だけを受け付ける。n は「何手目のつもりか」で、古い・重複した手を弾く
+    function hostApplyMove(playerId, col, n) {
+      if (!state || reported || n !== state.moves.length) return;
+      var d = derive(state.moves);
+      if (d.over || state.order[d.turnSeat] !== playerId) return;
+      if (!(col >= 0 && col < COLS) || d.heights[col] >= ROWS) return;
+      state.moves.push(col);
+      broadcastState();
+      onStateChanged(true);
+    }
+
+    function hostSchedule() {
+      clearTimeout(cpuTimer);
+      clearTimeout(turnTimer);
+      cpuTimer = turnTimer = null;
+      if (!Hitsumabushi.isGameMaster() || !state || reported) return;
+      var d = derive(state.moves);
+      if (d.over) {
+        reportTimer = setTimeout(reportGameOver, REPORT_DELAY_MS);
+        return;
+      }
+      var id = state.order[d.turnSeat];
+      var n = state.moves.length;
+      if (isCpuId(id)) {
+        cpuTimer = setTimeout(function () {
+          cpuTimer = null;
+          hostApplyMove(id, chooseCpuMove(state.moves), n);
+        }, CPU_THINK_MS);
+      } else {
+        // 時間切れ：ランダムな列に自動で落とす
+        turnTimer = setTimeout(function () {
+          turnTimer = null;
+          var cols = legalCols(derive(state.moves).heights);
+          hostApplyMove(id, cols[Math.floor(Math.random() * cols.length)], n);
+        }, TURN_MS + 300);
+      }
+    }
+
+    function startHeartbeat() {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = setInterval(function () {
+        if (reported) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+          return;
+        }
+        broadcastState();
+      }, HEARTBEAT_MS);
+    }
+
+    function reportGameOver() {
+      if (reported || !state) return;
+      var d = derive(state.moves);
+      if (!d.over) return;
+      reported = true;
+      clearInterval(heartbeatTimer);
+      var order = state.order;
+      var stats = { moves: state.moves.length };
+      if (d.winner !== -1) {
+        var w = order[d.winner], l = order[1 - d.winner];
+        var scores = {};
+        scores[w] = 1;
+        scores[l] = 0;
+        Hitsumabushi.sendGameOver({ winnerPlayerId: w, rankings: [w, l], isTie: false, scores: scores, stats: stats });
+      } else {
+        var tieScores = {};
+        tieScores[order[0]] = 0;
+        tieScores[order[1]] = 0;
+        Hitsumabushi.sendGameOver({ winnerPlayerId: null, isTie: true, scores: tieScores, stats: stats });
+      }
+    }
+
+    // ---------- 状態の反映（全員共通） ----------
+    function onStateChanged(animate) {
+      pendingDrop = false;
+      clearTimeout(pendingTimer);
+      turnStartedAt = Date.now();
+      var d = derive(state.moves);
+      renderAll(animate);
+      if (d.over && d.winner !== -1 && animate) playWinSound();
+      hostSchedule();
+    }
+
+    function isValidState(st) {
+      if (!st || !Array.isArray(st.order) || st.order.length !== 2 || !Array.isArray(st.moves)) return false;
+      if (st.moves.length > ROWS * COLS) return false;
+      for (var i = 0; i < st.moves.length; i++) if (!Number.isInteger(st.moves[i])) return false;
+      return derive(st.moves) !== null;
+    }
+
+    // 進行役から届いた状態を受け取る
+    function handleState(st, senderId) {
+      if (Hitsumabushi.isGameMaster() || senderId !== gameMasterId) return;
+      if (!isValidState(st)) return;
+      if (state && st.moves.length < state.moves.length) return;
+      var firstSync = !state;
+      var changed = !state || st.moves.length !== state.moves.length;
+      state = st;
+      if (changed) {
+        // 1手だけ進んだときだけ落とす。途中参加や取りこぼしは一気に描く
+        if (firstSync) renderedMoves = st.moves.length > 0 ? st.moves.length - 1 : 0;
+        onStateChanged(st.moves.length === renderedMoves + 1);
+      }
+    }
+
+    function resetMatch() {
+      clearTimeout(winHighlightTimer);
+      [cpuTimer, turnTimer, reportTimer, pendingTimer].forEach(function (t) { clearTimeout(t); });
+      cpuTimer = turnTimer = reportTimer = pendingTimer = null;
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+      cancelAnimationFrame(timerRaf);
+      reported = false;
+      pendingDrop = false;
+      renderedMoves = 0;
+      hoverCol = -1;
+      state = null;
+      slots.forEach(function (s) { s.innerHTML = ''; });
+    }
+
+    // ---------- SDK ----------
+    Hitsumabushi.init({
+      onStartMatch: function (config) {
+        // ⚠️ リマッチでも呼ばれる。ここで毎試合の状態をすべて初期化する
+        resetMatch();
+        myPlayerId = config.localPlayerId || null; // 観戦者は null。フォールバックしない
+        players = config.players || [];
+        gameMasterId = config.gameMasterId || null;
+        isSpectator = Hitsumabushi.isSpectator();
+        document.body.classList.toggle('spectating', isSpectator || !myPlayerId);
+        document.body.classList.toggle('transparent', !!config.isObsMode);
+
+        if (Hitsumabushi.isGameMaster()) {
+          // 先手は参加順の先頭。連戦では1試合ごとに入れ替える
+          var order = players.slice(0, 2).map(function (p) { return p.id; });
+          var shift = ((config.matchNumber || 1) - 1) % 2;
+          if (shift) order.reverse();
+          state = { order: order, moves: [] };
+          broadcastState();
+          startHeartbeat();
+          onStateChanged(false);
+        } else {
+          renderAll(false);
+        }
+      },
+      onMatchState: function (st) {
+        handleState(st, gameMasterId);
+      },
+      onObsModeChange: function (isObs) {
+        document.body.classList.toggle('transparent', isObs);
+      },
+      onGameData: function (payload, senderId) {
+        if (!payload || typeof payload !== 'object') return;
+        if (payload.type === 'STATE') {
+          handleState(payload.state, senderId);
+        } else if (payload.type === 'DROP') {
+          if (Hitsumabushi.isGameMaster() && !isCpuId(senderId)) {
+            hostApplyMove(senderId, payload.col, payload.n);
+          }
+        }
+      }
+    });
+
+    renderAll(false);
+  </script>
+</body>
+</html>
