@@ -80,7 +80,7 @@ describe('validateGuide', () => {
       ].join('\n');
       const errors = run(guide({ frontmatter }));
       expect(errors.some((e) => e.includes('slug は指定できません') && e.includes('ゲームIDから自動で決まります'))).toBe(true);
-      expect(errors.some((e) => e.includes('author は指定できません') && e.includes('creatorGithub'))).toBe(true);
+      expect(errors.some((e) => e.includes('author は指定できません') && e.includes('表示名'))).toBe(true);
     });
 
     it('accepts tags within the limits', () => {

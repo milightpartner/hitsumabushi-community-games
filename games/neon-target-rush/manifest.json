@@ -12,7 +12,7 @@
     "supported": true,
     "mode": "two_teams"
   },
-  "creatorGithub": "milightpartner",
+  "creator": "milightpartner",
   "resultModel": {
     "type": "single_winner",
     "allowTie": false

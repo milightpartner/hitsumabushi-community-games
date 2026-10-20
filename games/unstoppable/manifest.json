@@ -8,7 +8,7 @@
     "type": "variable",
     "allowCpuFill": true
   },
-  "creatorGithub": "milightpartner",
+  "creator": "milightpartner",
   "resultModel": {
     "type": "single_winner",
     "allowTie": false
