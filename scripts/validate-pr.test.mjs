@@ -6,7 +6,7 @@ const validManifest = (overrides = {}) => ({
   title: 'マイゲーム',
   players: { min: 2, max: 2, type: 'fixed' },
   resultModel: { type: 'single_winner' },
-  creatorGithub: 'alice',
+  creator: 'alice',
   ...overrides,
 });
 
@@ -132,27 +132,27 @@ describe('validatePr', () => {
     expect(result.errors.some((e) => e.includes('players.max'))).toBe(true);
   });
 
-  it('rejects a new submission missing creatorGithub', () => {
+  it('rejects a new submission missing creator', () => {
     const result = validatePr({
       changedFiles: ['games/my-game/manifest.json'],
       prAuthor: 'alice',
       readBaseManifest: () => null,
       readHeadManifest: () => {
         const m = validManifest();
-        delete m.creatorGithub;
+        delete m.creator;
         return m;
       },
     });
     expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => e.includes('creatorGithub'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('creator'))).toBe(true);
   });
 
-  it('rejects a new submission where creatorGithub does not match the PR author', () => {
+  it('rejects a new submission where creator does not match the PR author', () => {
     const result = validatePr({
       changedFiles: ['games/my-game/manifest.json'],
       prAuthor: 'mallory',
       readBaseManifest: () => null,
-      readHeadManifest: () => validManifest({ creatorGithub: 'alice' }),
+      readHeadManifest: () => validManifest({ creator: 'alice' }),
     });
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes('mallory'))).toBe(true);
@@ -162,19 +162,34 @@ describe('validatePr', () => {
     const result = validatePr({
       changedFiles: ['games/my-game/manifest.json'],
       prAuthor: 'mallory',
-      readBaseManifest: () => validManifest({ creatorGithub: 'alice' }),
-      readHeadManifest: () => validManifest({ creatorGithub: 'mallory' }),
+      readBaseManifest: () => validManifest({ creator: 'alice' }),
+      readHeadManifest: () => validManifest({ creator: 'mallory' }),
     });
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes('別のGitHubユーザー'))).toBe(true);
   });
 
-  it('rejects reassigning creatorGithub even by the original creator', () => {
+  it('rejects reassigning creator even by the original creator', () => {
     const result = validatePr({
       changedFiles: ['games/my-game/manifest.json'],
       prAuthor: 'alice',
-      readBaseManifest: () => validManifest({ creatorGithub: 'alice' }),
-      readHeadManifest: () => validManifest({ creatorGithub: 'bob' }),
+      readBaseManifest: () => validManifest({ creator: 'alice' }),
+      readHeadManifest: () => validManifest({ creator: 'bob' }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('後から変更できません'))).toBe(true);
+  });
+
+  it('rejects removing creator from an existing game (OmoshiroGamePortal#618)', () => {
+    const result = validatePr({
+      changedFiles: ['games/my-game/manifest.json'],
+      prAuthor: 'alice',
+      readBaseManifest: () => validManifest({ creator: 'alice' }),
+      readHeadManifest: () => {
+        const m = validManifest();
+        delete m.creator;
+        return m;
+      },
     });
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes('後から変更できません'))).toBe(true);
@@ -214,8 +229,8 @@ describe('validatePr', () => {
   });
 
   describe('team creators (creators.json)', () => {
-    const creators = { milightpartner: { displayName: 'ひつまぶし', members: ['8720soichiro'] } };
-    const team = (overrides) => validManifest({ creatorGithub: 'milightpartner', ...overrides });
+    const creators = { milightpartner: { members: ['8720soichiro'] } };
+    const team = (overrides) => validManifest({ creator: 'milightpartner', ...overrides });
 
     it('accepts a new team game submitted by a member', () => {
       const result = validatePr({
@@ -262,8 +277,8 @@ describe('validatePr', () => {
       const result = validatePr({
         changedFiles: ['games/my-game/index.html', 'creators.json'],
         prAuthor: 'mallory',
-        readBaseManifest: () => validManifest({ creatorGithub: 'mallory' }),
-        readHeadManifest: () => validManifest({ creatorGithub: 'mallory' }),
+        readBaseManifest: () => validManifest({ creator: 'mallory' }),
+        readHeadManifest: () => validManifest({ creator: 'mallory' }),
         creators,
       });
       expect(result.ok).toBe(false);
@@ -346,7 +361,7 @@ describe('validatePr', () => {
 describe('validateRepository (maintainer infrastructure PRs)', () => {
   const manifests = {
     'game-a': validManifest({ gameId: 'game-a' }),
-    'game-b': validManifest({ gameId: 'game-b', creatorGithub: 'milightpartner' }),
+    'game-b': validManifest({ gameId: 'game-b', creator: 'milightpartner' }),
   };
   const validGuides = {
     'games/game-a/guide.md': '---\ndescription: 説明です。\n---\n\n# 遊び方\n',

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { canActFor } from './creators.mjs';
 
-const creators = { milightpartner: { displayName: 'ひつまぶし', members: ['8720soichiro', 'gami8'] } };
+const creators = { milightpartner: { members: ['8720soichiro', 'gami8'] } };
 
 describe('creators', () => {
   it('lets a user act as themselves (case-insensitive)', () => {

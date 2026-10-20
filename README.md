@@ -9,7 +9,7 @@
 
 ## チームでの投稿 (`creators.json`)
 
-`manifest.json` の `creatorGithub` には、通常は投稿者自身のGitHubユーザー名を書きます。代わりに [`creators.json`](./creators.json) に定義したチーム名(例: ミライト公式ゲームの `milightpartner`)を書くと、そのチームの `members` の誰でもそのゲームを投稿・更新できます(`displayName` は解説記事でチームを表示するための名前です。今の解説サイトのエンジンは著者を表示していません)。
+`manifest.json` の `creator` には、通常は投稿者自身のGitHubユーザー名を書きます。代わりに [`creators.json`](./creators.json) に定義したチーム名(例: ミライト公式ゲームの `milightpartner`)を書くと、そのチームの `members` の誰でもそのゲームを投稿・更新できます。作者の表示名はここでは持たず、ポータルの運営が設定します(PRテンプレートの「表示名」欄で申告)。
 
 `creators.json` は `games/` の外にあるため、メンテナーしか変更できません(PRの検証はマージ先ブランチの `creators.json` を使います)。
 

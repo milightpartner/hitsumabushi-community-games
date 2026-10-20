@@ -16,8 +16,8 @@ npx -p @milightpartner/hitsumabushi-sdk hitsumabushi init
 
 1. このリポジトリをFork
 2. 自分のリポジトリの `games/<あなたのゲームID>/` を、ディレクトリごとそのままコピーする(`index.html`、`manifest.json`、`guide.md`、必要なら画像・音声アセット)
-3. `manifest.json` に `creatorGithub` フィールドを追加し、**あなたのGitHubユーザー名**を設定する(例: `"creatorGithub": "your-github-username"`)
-4. PRを送る
+3. `manifest.json` に `creator` フィールドを追加し、**あなたのGitHubユーザー名**を設定する(例: `"creator": "your-github-username"`)。ポータルでは、作者ごとのプレイ実績の集計にもこの値を使います
+4. PRを送る。PRの説明欄のテンプレートにある「表示名」に、ポータルで作者として表示したい名前を書いてください(任意。未記入ならGitHubユーザー名がそのまま表示されます)
 
 ## 3. 守ってほしいルール(CIが自動チェックします)
 
@@ -25,7 +25,7 @@ npx -p @milightpartner/hitsumabushi-sdk hitsumabushi init
 - **1つのPRで扱えるのは1ゲームのみ**です。複数ゲームをまとめて追加/更新するPRは分けて送ってください。
 - ゲームID(ディレクトリ名)は半角英数小文字とハイフンのみ(`kebab-case`)。
 - `manifest.json` は [ゲームマニフェスト仕様書](https://github.com/milightpartner/OmoshiroGamePortal/blob/main/packages/hitsumabushi-sdk/docs/game-manifest-spec.md) に準拠している必要があります。
-- **一度設定した `creatorGithub` は変更できません**。他人が作ったゲームのディレクトリを、別のGitHubアカウントから変更することはできません(なりすまし防止)。
+- **一度設定した `creator` は変更できません**。他人が作ったゲームのディレクトリを、別のGitHubアカウントから変更することはできません(なりすまし防止)。
 - **SDKは公開URLの `<script>` タグで、版を固定して読み込んでください**(推奨・標準の書き方です)。`<version>` には使っているSDKの版(例: `0.20.0`)を入れます。`hitsumabushi init` が作る `index.html` には、最初から入っています。
 
   ```html

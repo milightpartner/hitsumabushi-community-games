@@ -9,7 +9,7 @@
 // https://milightpartner.jp/schemas/game-manifest-1.json) drift apart (OmoshiroGamePortal#249).
 // It is delegated to the injected `validateManifestSchema`. What stays here is business logic
 // that is specific to *this* repo and has no business being in a generic manifest schema: the
-// games/<gameId>/ directory-naming convention, creatorGithub ownership rules, and the
+// games/<gameId>/ directory-naming convention, `creator` ownership rules, and the
 // dev-harness-path footgun check, plus guide.md (validate-guide.mjs).
 import { canActFor } from './creators.mjs';
 import { validateGuide } from './validate-guide.mjs';
@@ -79,24 +79,25 @@ export function validatePr({ changedFiles, prAuthor, readBaseManifest, readHeadM
   errors.push(...checkManifest(gameId, headManifest, validateManifestSchema));
 
   // --- ownership check: prevents editing someone else's game directory ---
-  // creatorGithub is either the submitter's own login or a team from creators.json (creators.mjs).
+  // `creator` is either the submitter's own login or a team from creators.json (creators.mjs).
+  // (It was called `creatorGithub` until OmoshiroGamePortal#618; the SDK's schema now rejects the old name.)
   const baseManifest = readBaseManifest(gameId);
   if (baseManifest) {
     // Existing game: ownership was fixed at creation time and can't be reassigned by an edit PR.
-    if (baseManifest.creatorGithub && !canActFor(baseManifest.creatorGithub, prAuthor, creators)) {
+    if (baseManifest.creator && !canActFor(baseManifest.creator, prAuthor, creators)) {
       errors.push(
-        `games/${gameId}/ は "${baseManifest.creatorGithub}" が作成したゲームです。別のGitHubユーザー("${prAuthor}")からは変更できません。`,
+        `games/${gameId}/ は "${baseManifest.creator}" が作成したゲームです。別のGitHubユーザー("${prAuthor}")からは変更できません。`,
       );
     }
-    if (headManifest.creatorGithub && headManifest.creatorGithub !== baseManifest.creatorGithub) {
-      errors.push('manifest.json の creatorGithub は後から変更できません。');
+    if (headManifest.creator !== baseManifest.creator) {
+      errors.push('manifest.json の creator は後から変更できません。');
     }
   } else {
     // New game: the submitter is free to claim it, but must claim it as themselves.
-    if (typeof headManifest.creatorGithub !== 'string' || !headManifest.creatorGithub.trim()) {
-      errors.push('新規ゲームの manifest.json には creatorGithub (あなたのGitHubユーザー名) が必須です。');
-    } else if (!canActFor(headManifest.creatorGithub, prAuthor, creators)) {
-      errors.push(`manifest.json の creatorGithub ("${headManifest.creatorGithub}") はPR作成者("${prAuthor}")と一致している必要があります。`);
+    if (typeof headManifest.creator !== 'string' || !headManifest.creator.trim()) {
+      errors.push('新規ゲームの manifest.json には creator (あなたのGitHubユーザー名) が必須です。');
+    } else if (!canActFor(headManifest.creator, prAuthor, creators)) {
+      errors.push(`manifest.json の creator ("${headManifest.creator}") はPR作成者("${prAuthor}")と一致している必要があります。`);
     }
   }
 

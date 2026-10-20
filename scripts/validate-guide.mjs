@@ -27,7 +27,7 @@ const ALLOWED_KEYS = ['gameId', 'title', 'description', 'quickRules', 'tags'];
 const RESERVED_KEY_REASONS = {
   slug: '記事のURLはゲームIDから自動で決まります',
   category: 'カテゴリは自動で決まります',
-  author: 'なりすまし防止のため、作者名は manifest.json の creatorGithub から決まります',
+  author: 'なりすまし防止のため、作者の表示名はポータルの運営が設定します(PRテンプレートの「表示名」欄で申告してください)',
   isStaging: '公開状態は運営が管理します',
   draft: '公開状態は運営が管理します',
   publishedAt: '公開日時は自動で決まります',
