@@ -570,7 +570,6 @@
     // ---------- 効果音（WebAudio で合成。音源ファイルは使わない） ----------
 
     let soundOn = true;
-    try { soundOn = localStorage.getItem('hitsumabushi-gacha-sound') !== 'off'; } catch (e) { /* 保存できない環境では毎回オン */ }
     let audioCtx = null;
 
     function ensureAudio() {
@@ -621,7 +620,6 @@
     function renderSoundBtn() { els.soundBtn.textContent = soundOn ? '🔊' : '🔇'; }
     els.soundBtn.addEventListener('click', () => {
       soundOn = !soundOn;
-      try { localStorage.setItem('hitsumabushi-gacha-sound', soundOn ? 'on' : 'off'); } catch (e) { /* 保存できなくても切り替えは効く */ }
       renderSoundBtn();
     });
 
