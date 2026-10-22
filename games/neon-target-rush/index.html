@@ -393,7 +393,7 @@
       <button class="bomb-btn" id="bombBtn" style="display: none;" title="爆弾トラップ">💣</button>
       <div class="stun-banner" id="stunBanner">💥 STUNNED! (-1 PT)</div>
 
-      <!-- ゲームオーバー / 勝利表示 -->
+      <!-- 開始前のカウントダウン / 勝利表示 -->
       <div class="gameover-overlay" id="gameoverOverlay">
         <div class="winner-title" id="winnerTitle">VICTORY! 🎉</div>
         <div class="winner-subtitle" id="winnerSubtitle">勝者が決定しました！</div>
@@ -489,6 +489,9 @@
       var scores = {};
       var isTeamBattle = false;
       var isGameOver = false;
+      // ゲームマスターの開始の合図（START_MATCH）を受けるまで、ターゲットを出さない
+      var isStarted = false;
+      var countdownTimer = null;
       var isStunned = false;
       var goalScore = DEFAULT_GOAL;
       var stunTimer = null;
@@ -598,7 +601,7 @@
       }
 
       function spawnObjects() {
-        if (isGameOver) return;
+        if (isGameOver || !isStarted) return;
 
         var arenaWidth = arena.clientWidth;
         var arenaHeight = arena.clientHeight;
@@ -761,12 +764,16 @@
       // --- リセット（初回起動 & リマッチ用） ---
       function resetGame(config) {
         isGameOver = false;
+        isStarted = false;
+        clearInterval(countdownTimer);
         isStunned = false;
         if (stunTimer) clearTimeout(stunTimer);
 
         arena.classList.remove('stunned');
         stunBanner.style.display = 'none';
         gameoverOverlay.style.display = 'none';
+        targetBtn.style.display = 'none';
+        bombBtn.style.display = 'none';
 
         var isSpectator = Hitsumabushi.isSpectator();
         if (arena) {
@@ -783,8 +790,38 @@
           setupPlayers([]);
         }
 
-        myStatusLabel.textContent = isSpectator ? '👀 観戦中 (タップ不可)' : 'ターゲットをタップせよ！';
+        myStatusLabel.textContent = 'まもなく開始...';
+      }
+
+      function showCountdown(count) {
+        winnerTitle.textContent = count;
+        winnerSubtitle.textContent = 'まもなく開始';
+        gameoverOverlay.style.display = 'flex';
+      }
+
+      function startPlay() {
+        isStarted = true;
+        gameoverOverlay.style.display = 'none';
+        myStatusLabel.textContent = Hitsumabushi.isSpectator() ? '👀 観戦中 (タップ不可)' : 'ターゲットをタップせよ！';
         spawnObjects();
+      }
+
+      // ゲームマスターだけが 3・2・1 と開始の合図を配り、自分も同じ合図で始める
+      function startCountdown() {
+        var count = 3;
+        showCountdown(count);
+        Hitsumabushi.sendGameData({ type: 'COUNTDOWN_TICK', count: count });
+        countdownTimer = setInterval(function () {
+          count--;
+          if (count > 0) {
+            showCountdown(count);
+            Hitsumabushi.sendGameData({ type: 'COUNTDOWN_TICK', count: count });
+          } else {
+            clearInterval(countdownTimer);
+            Hitsumabushi.sendGameData({ type: 'START_MATCH' });
+            startPlay();
+          }
+        }, 1000);
       }
 
       // イベントリスナー登録
@@ -796,13 +833,21 @@
         Hitsumabushi.init({
           onStartMatch: function (config) {
             resetGame(config);
+            // 開始を押したホストだけが先に始めないよう、ゲームマスターが配る合図で全員が始める
+            if (Hitsumabushi.isGameMaster()) {
+              startCountdown();
+            }
           },
           onObsModeChange: function (isObsMode) {
             document.body.classList.toggle('transparent', !!isObsMode);
           },
           onGameData: function (payload) {
             if (!payload) return;
-            if (payload.type === 'SCORE_SYNC' && payload.playerId) {
+            if (payload.type === 'COUNTDOWN_TICK') {
+              showCountdown(payload.count);
+            } else if (payload.type === 'START_MATCH') {
+              startPlay();
+            } else if (payload.type === 'SCORE_SYNC' && payload.playerId) {
               scores[payload.playerId] = payload.score;
               renderPlayerBars();
               checkGameEnd();
