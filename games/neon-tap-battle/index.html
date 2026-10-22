@@ -94,6 +94,9 @@
     var isSpectator = false;
     var localPlayerId = null;
     var currentConfig = null;
+    // ゲームマスターの開始の合図（START_MATCH）を受けるまで、タップを受け付けない
+    var isStarted = false;
+    var countdownTimer = null;
 
     function updateScoreUI() {
       var scoreDisplay = document.getElementById('scoreDisplay');
@@ -118,6 +121,8 @@
         currentConfig = config;
         myScore = 0;
         isGameOver = false;
+        isStarted = false;
+        clearInterval(countdownTimer);
         playerScores = {};
         (config.players || []).forEach(function (p) {
           playerScores[p.id] = 0;
@@ -130,15 +135,9 @@
         var subText = document.querySelector('.game-card p');
 
         if (tapBtn) {
-          if (isSpectator) {
-            tapBtn.disabled = true;
-            tapBtn.style.pointerEvents = 'none';
-            tapBtn.textContent = 'タップで連打！ (観戦中)';
-          } else {
-            tapBtn.disabled = false;
-            tapBtn.style.pointerEvents = 'auto';
-            tapBtn.textContent = 'タップで連打！';
-          }
+          tapBtn.style.pointerEvents = isSpectator ? 'none' : 'auto';
+          tapBtn.disabled = true;
+          tapBtn.textContent = 'まもなく開始...';
         }
 
         if (subText) {
@@ -175,6 +174,11 @@
         if (config.isObsMode) {
           document.body.classList.add('transparent');
         }
+
+        // 開始を押したホストだけが先に始めないよう、ゲームマスターが配る合図で全員が始める
+        if (Hitsumabushi.isGameMaster()) {
+          startCountdown();
+        }
       },
 
       onObsModeChange: function (isObsMode) {
@@ -187,7 +191,11 @@
 
       onGameData: function (payload) {
         if (isGameOver || !payload) return;
-        if (payload.type === 'TAP_UPDATE' && payload.playerId) {
+        if (payload.type === 'COUNTDOWN_TICK') {
+          showCountdown(payload.count);
+        } else if (payload.type === 'START_MATCH') {
+          startPlay();
+        } else if (payload.type === 'TAP_UPDATE' && payload.playerId) {
           playerScores[payload.playerId] = payload.score;
           updateScoreUI();
 
@@ -206,9 +214,40 @@
       }
     });
 
+    function showCountdown(count) {
+      var tapBtn = document.getElementById('tapBtn');
+      tapBtn.disabled = true;
+      tapBtn.textContent = '開始まで ' + count;
+    }
+
+    function startPlay() {
+      isStarted = true;
+      var tapBtn = document.getElementById('tapBtn');
+      tapBtn.disabled = isSpectator;
+      tapBtn.textContent = isSpectator ? 'タップで連打！ (観戦中)' : 'タップで連打！';
+    }
+
+    // ゲームマスターだけが 3・2・1 と開始の合図を配り、自分も同じ合図で始める
+    function startCountdown() {
+      var count = 3;
+      showCountdown(count);
+      Hitsumabushi.sendGameData({ type: 'COUNTDOWN_TICK', count: count });
+      countdownTimer = setInterval(function () {
+        count--;
+        if (count > 0) {
+          showCountdown(count);
+          Hitsumabushi.sendGameData({ type: 'COUNTDOWN_TICK', count: count });
+        } else {
+          clearInterval(countdownTimer);
+          Hitsumabushi.sendGameData({ type: 'START_MATCH' });
+          startPlay();
+        }
+      }, 1000);
+    }
+
     // 2. タップイベント
     document.getElementById('tapBtn').addEventListener('click', function () {
-      if (isGameOver || isSpectator) return;
+      if (isGameOver || isSpectator || !isStarted) return;
 
       myScore++;
       var config = Hitsumabushi.getConfig();
