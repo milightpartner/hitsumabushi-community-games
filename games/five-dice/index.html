@@ -758,7 +758,6 @@
     // ---------- 効果音（WebAudio で合成。音源ファイルは使わない） ----------
 
     let soundOn = true;
-    try { soundOn = localStorage.getItem('five-dice-sound') !== 'off'; } catch (e) { /* 保存できない環境では毎回オン */ }
     let audioCtx = null;
     let noiseBuf = null;
 
@@ -852,7 +851,6 @@
     function renderSoundBtn() { els.soundBtn.textContent = soundOn ? '🔊' : '🔇'; }
     els.soundBtn.addEventListener('click', () => {
       soundOn = !soundOn;
-      try { localStorage.setItem('five-dice-sound', soundOn ? 'on' : 'off'); } catch (e) { /* 保存できなくても切り替えは効く */ }
       renderSoundBtn();
     });
 
