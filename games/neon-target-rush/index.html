@@ -489,7 +489,7 @@
       var scores = {};
       var isTeamBattle = false;
       var isGameOver = false;
-      // ゲームマスターの開始の合図（START_MATCH）を受けるまで、ターゲットを出さない
+      // 開始のカウントダウンが終わるまで、ターゲットを出さない
       var isStarted = false;
       var countdownTimer = null;
       var isStunned = false;
@@ -806,19 +806,16 @@
         spawnObjects();
       }
 
-      // ゲームマスターだけが 3・2・1 と開始の合図を配り、自分も同じ合図で始める
+      // 3・2・1 と数えて始める
       function startCountdown() {
         var count = 3;
         showCountdown(count);
-        Hitsumabushi.sendGameData({ type: 'COUNTDOWN_TICK', count: count });
         countdownTimer = setInterval(function () {
           count--;
           if (count > 0) {
             showCountdown(count);
-            Hitsumabushi.sendGameData({ type: 'COUNTDOWN_TICK', count: count });
           } else {
             clearInterval(countdownTimer);
-            Hitsumabushi.sendGameData({ type: 'START_MATCH' });
             startPlay();
           }
         }, 1000);
@@ -833,21 +830,15 @@
         Hitsumabushi.init({
           onStartMatch: function (config) {
             resetGame(config);
-            // 開始を押したホストだけが先に始めないよう、ゲームマスターが配る合図で全員が始める
-            if (Hitsumabushi.isGameMaster()) {
-              startCountdown();
-            }
+            // 各端末が自分で数える。合図を配ると、それより後に起動した端末が始まれなくなるため（#24）
+            startCountdown();
           },
           onObsModeChange: function (isObsMode) {
             document.body.classList.toggle('transparent', !!isObsMode);
           },
           onGameData: function (payload) {
             if (!payload) return;
-            if (payload.type === 'COUNTDOWN_TICK') {
-              showCountdown(payload.count);
-            } else if (payload.type === 'START_MATCH') {
-              startPlay();
-            } else if (payload.type === 'SCORE_SYNC' && payload.playerId) {
+            if (payload.type === 'SCORE_SYNC' && payload.playerId) {
               scores[payload.playerId] = payload.score;
               renderPlayerBars();
               checkGameEnd();
