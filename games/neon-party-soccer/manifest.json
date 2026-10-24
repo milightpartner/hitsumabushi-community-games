@@ -1,0 +1,21 @@
+{
+  "$schema": "https://milightpartner.jp/schemas/game-manifest-1.json",
+  "gameId": "neon-party-soccer",
+  "title": "ネオン・パーティサッカー",
+  "version": "0.1.0",
+  "creator": "milightpartner",
+  "players": {
+    "min": 2,
+    "max": 4,
+    "type": "variable",
+    "allowCpuFill": true
+  },
+  "teamBattle": {
+    "supported": true,
+    "mode": "two_teams"
+  },
+  "resultModel": {
+    "type": "single_winner",
+    "allowTie": true
+  }
+}

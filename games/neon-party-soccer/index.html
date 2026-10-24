@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ネオン・パーティサッカー</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    html, body {
+      overscroll-behavior: none;
+      overflow: hidden;
+      height: 100%;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0a0b10;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100vh;
+      padding: 8px;
+      gap: 6px;
+      transition: background-color 0.3s;
+    }
+    body.transparent { background-color: transparent !important; }
+
+    .header-bar {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 860px;
+      padding: 6px 14px;
+      background: rgba(22, 26, 42, 0.88);
+      border: 1px solid rgba(0, 240, 255, 0.35);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      gap: 8px;
+    }
+    .team-box {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      flex: 1;
+    }
+    .team-box.right {
+      align-items: flex-end;
+      text-align: right;
+    }
+    .team-label {
+      font-weight: 800;
+      font-size: clamp(0.75rem, 2.2vw, 0.95rem);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .team-a-color { color: #00f0ff; text-shadow: 0 0 8px rgba(0, 240, 255, 0.5); }
+    .team-b-color { color: #ff007f; text-shadow: 0 0 8px rgba(255, 0, 127, 0.5); }
+
+    .center-hud {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+      padding: 0 8px;
+    }
+    .score-board {
+      font-size: clamp(1.2rem, 3.5vw, 1.65rem);
+      font-weight: 900;
+      color: #ffe600;
+      letter-spacing: 2px;
+      line-height: 1.1;
+      text-shadow: 0 0 12px rgba(255, 230, 0, 0.45);
+    }
+    .timer-badge {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #cbd5e1;
+      background: rgba(15, 23, 42, 0.8);
+      padding: 1px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      margin-top: 2px;
+    }
+
+    .spectator-badge {
+      display: none;
+      flex-shrink: 0;
+      padding: 3px 12px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.14);
+      border: 1px solid #ffe600;
+      color: #ffe600;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    body.spectating .spectator-badge { display: block; }
+    body.spectating .stage,
+    body.spectating .controls-bar { pointer-events: none; }
+
+    .stage {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    canvas {
+      background: #070b14;
+      border: 2px solid rgba(0, 240, 255, 0.45);
+      border-radius: 16px;
+      box-shadow: 0 0 28px rgba(0, 240, 255, 0.18), inset 0 0 24px rgba(255, 0, 127, 0.12);
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    .controls-bar {
+      flex-shrink: 0;
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 4px 8px;
+    }
+    .status-bar {
+      flex: 1;
+      min-height: 1.4em;
+      font-size: clamp(0.8rem, 2.2vw, 0.95rem);
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .status-bar.result {
+      color: #ffe600;
+      font-weight: 800;
+      text-shadow: 0 0 10px rgba(255, 230, 0, 0.4);
+    }
+
+    .dash-btn {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 8px 18px;
+      border-radius: 12px;
+      border: 2px solid #39ff14;
+      background: rgba(57, 255, 20, 0.16);
+      color: #39ff14;
+      font-weight: 800;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      box-shadow: 0 0 14px rgba(57, 255, 20, 0.25);
+      transition: transform 0.1s, opacity 0.15s, background 0.15s;
+      touch-action: manipulation;
+    }
+    .dash-btn:active {
+      transform: scale(0.95);
+      background: rgba(57, 255, 20, 0.32);
+    }
+    .dash-btn:disabled {
+      opacity: 0.45;
+      border-color: #64748b;
+      color: #94a3b8;
+      background: rgba(30, 41, 59, 0.5);
+      box-shadow: none;
+      cursor: default;
+    }
+    @media (max-width: 520px) {
+      .dash-btn .btn-sub { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header-bar">
+    <div class="team-box left">
+      <div class="team-label team-a-color" id="teamAName">🔵 CYAN (Player 1)</div>
+    </div>
+    <div class="center-hud">
+      <div class="score-board" id="scoreBoard">0 - 0</div>
+      <div class="timer-badge" id="timerDisplay">60s</div>
+    </div>
+    <div class="team-box right">
+      <div class="team-label team-b-color" id="teamBName">🔴 MAGENTA (Player 2)</div>
+    </div>
+  </div>
+
+  <div class="spectator-badge" id="spectatorBadge">👀 観戦中</div>
+
+  <div class="stage" id="stage">
+    <canvas id="gameCanvas"></canvas>
+  </div>
+
+  <div class="controls-bar">
+    <div class="status-bar" id="statusMsg">3点先取 または 60秒で勝利！</div>
+    <button type="button" class="dash-btn" id="dashBtn" aria-label="シュート・タックル">
+      <span>⚡ シュート</span>
+      <span class="btn-sub">/ タックル</span>
+    </button>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/0.25.0/hitsumabushi-sdk.js"></script>
+  <script>
+    // ビューポート（各プレイヤーの画面に映る論理サイズ）
+    const VIEW_W = 800;
+    const VIEW_H = 480;
+
+    // ワールド座標系（画面の約2.5倍の広大なサッカーコート）
+    const WORLD_W = 2000;
+    const WORLD_H = 1200;
+    const FIELD_LEFT = 120;
+    const FIELD_RIGHT = WORLD_W - 120; // 1880 (コート幅 1760)
+    const FIELD_TOP = 90;
+    const FIELD_BOTTOM = WORLD_H - 90; // 1110 (コート高 1020)
+    const FIELD_CENTER_X = WORLD_W / 2;
+    const FIELD_CENTER_Y = WORLD_H / 2;
+
+    const GOAL_HALF_H = 135; // ゴール幅 270
+    const GOAL_TOP = FIELD_CENTER_Y - GOAL_HALF_H;
+    const GOAL_BOTTOM = FIELD_CENTER_Y + GOAL_HALF_H;
+    const GOAL_DEPTH = 64;
+
+    const PLAYER_RADIUS = 20;
+    const BALL_RADIUS = 14;
+    const BASE_SPEED = 2.3;     // 画面酔いしない落ち着いた移動速度
+    const DRIBBLE_SPEED = 1.95; // ドリブル中はさらに少し落ち着いた速度
+    const DASH_SPEED = 5.6;     // ダッシュ速度もマイルドに調整
+    const DASH_DURATION = 14;
+    const DASH_COOLDOWN = 48;
+    const STUN_DURATION = 30;
+
+    // ボール物理（芝生らしい重みと摩擦・ドリブル保持）
+    const BALL_FRICTION = 0.94;         // 芝生の減衰（転がって自然に止まる）
+    const BALL_WALL_RESTITUTION = 0.5;  // 壁バウンドは重めに減速
+    const SHOOT_SPEED = 11.5;           // シュート初速
+    const STEAL_LOCK_FRAMES = 16;       // シュート直後や被奪取直後の再トラップ防止
+
+    const WIN_SCORE = 3;
+    const MATCH_DURATION_MS = 60000;
+    const SYNC_INTERVAL_MS = 100;       // 10 pkt/sec from GameMaster
+    const INPUT_INTERVAL_MS = 50;       // max 20 pkt/sec from clients
+
+    const canvas = document.getElementById('gameCanvas');
+    const stage = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+    const dashBtn = document.getElementById('dashBtn');
+
+    let localPlayerId = 'p1';
+    let isGameMaster = false;
+    let isSpectator = false;
+    let isGameOver = false;
+
+    let configSeats = [
+      { id: 'p1', name: 'Player 1', teamId: null, isCpu: false },
+      { id: 'p2', name: 'Player 2', teamId: null, isCpu: false },
+    ];
+    let players = [];
+    let teamScores = { team_a: 0, team_b: 0 };
+    let remainingMs = MATCH_DURATION_MS;
+    let displayedSec = 60;
+    let lastTickAt = null;
+    let lastSyncSentAt = 0;
+    let lastInputSentAt = 0;
+    let lastSentInputKey = '';
+    let goalBannerTimer = 0;
+    let goalBannerText = '';
+
+    // ボール状態（ownerId が非nullの間はその選手の足元でドリブルキープ）
+    let ball = {
+      x: FIELD_CENTER_X,
+      y: FIELD_CENTER_Y,
+      vx: 0,
+      vy: 0,
+      radius: BALL_RADIUS,
+      ownerId: null,
+      lockOwnerId: null,
+      lockTimer: 0,
+      powerTrail: 0,
+    };
+
+    // ローカルのポインター方向入力（画面中央＝自機からの相対ベクトル）
+    let pointerInput = {
+      active: false,
+      dx: 0,
+      dy: 0,
+    };
+    const keysDown = new Set();
+
+    const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+
+    function resizeCanvas() {
+      const availW = stage.clientWidth;
+      const availH = stage.clientHeight;
+      if (availW <= 0 || availH <= 0) return;
+
+      const cssScale = Math.min(availW / VIEW_W, availH / VIEW_H);
+      const cssW = Math.floor(VIEW_W * cssScale);
+      const cssH = Math.floor(VIEW_H * cssScale);
+      const dpr = window.devicePixelRatio || 1;
+
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+
+      ctx.setTransform(canvas.width / VIEW_W, 0, 0, canvas.height / VIEW_H, 0, 0);
+    }
+
+    new ResizeObserver(resizeCanvas).observe(stage);
+    resizeCanvas();
+
+    function resolveSeatTeam(seat, index, seats = configSeats) {
+      if (typeof seat.teamId === 'string' && seat.teamId !== '') {
+        const nonEmptyTeamIds = [
+          ...new Set(seats.map((s) => s.teamId).filter((t) => typeof t === 'string' && t !== '')),
+        ];
+        if (nonEmptyTeamIds.length >= 2) {
+          const leftTeamId = nonEmptyTeamIds.includes('team_a')
+            ? 'team_a'
+            : nonEmptyTeamIds[0] === 'team_b'
+              ? nonEmptyTeamIds[1]
+              : nonEmptyTeamIds[0];
+          return seat.teamId === leftTeamId ? 'team_a' : 'team_b';
+        }
+        return seat.teamId === 'team_b' ? 'team_b' : 'team_a';
+      }
+      return index % 2 === 0 ? 'team_a' : 'team_b';
+    }
+
+    function spawnCoordsFor(teamId, slotIndexInTeam, teamTotal) {
+      const distFromCenter = 280;
+      const x = teamId === 'team_a' ? FIELD_CENTER_X - distFromCenter : FIELD_CENTER_X + distFromCenter;
+      const offsetY = teamTotal <= 1 ? 0 : (slotIndexInTeam === 0 ? -130 : 130);
+      return {
+        x,
+        y: FIELD_CENTER_Y + offsetY,
+        dirX: teamId === 'team_a' ? 1 : -1,
+        dirY: 0,
+      };
+    }
+
+    function buildPlayersFromSeats(seats) {
+      const baseList = seats.map((s, idx) => ({
+        id: s.id,
+        name: s.name || `Player ${idx + 1}`,
+        teamId: resolveSeatTeam(s, idx, seats),
+        isCpu: !!s.isCpu,
+        isVirtual: false,
+      }));
+
+      const teamACount = baseList.filter((p) => p.teamId === 'team_a').length;
+      const teamBCount = baseList.filter((p) => p.teamId === 'team_b').length;
+      if (teamACount < teamBCount) {
+        baseList.push({
+          id: 'cpu_extra_a',
+          name: 'CPU',
+          teamId: 'team_a',
+          isCpu: true,
+          isVirtual: true,
+        });
+      } else if (teamBCount < teamACount) {
+        baseList.push({
+          id: 'cpu_extra_b',
+          name: 'CPU',
+          teamId: 'team_b',
+          isCpu: true,
+          isVirtual: true,
+        });
+      }
+
+      const totals = {
+        team_a: baseList.filter((p) => p.teamId === 'team_a').length,
+        team_b: baseList.filter((p) => p.teamId === 'team_b').length,
+      };
+      const seen = { team_a: 0, team_b: 0 };
+
+      return baseList.map((p) => {
+        const slotIdx = seen[p.teamId]++;
+        const spawn = spawnCoordsFor(p.teamId, slotIdx, totals[p.teamId]);
+        return {
+          ...p,
+          x: spawn.x,
+          y: spawn.y,
+          vx: 0,
+          vy: 0,
+          dirX: spawn.dirX,
+          dirY: spawn.dirY,
+          moveX: 0,
+          moveY: 0,
+          dashTimer: 0,
+          dashCooldown: 0,
+          stunTimer: 0,
+        };
+      });
+    }
+
+    function resetPositions() {
+      const totals = {
+        team_a: players.filter((p) => p.teamId === 'team_a').length,
+        team_b: players.filter((p) => p.teamId === 'team_b').length,
+      };
+      const seen = { team_a: 0, team_b: 0 };
+      for (const p of players) {
+        const slotIdx = seen[p.teamId]++;
+        const spawn = spawnCoordsFor(p.teamId, slotIdx, totals[p.teamId]);
+        p.x = spawn.x;
+        p.y = spawn.y;
+        p.vx = 0;
+        p.vy = 0;
+        p.dirX = spawn.dirX;
+        p.dirY = spawn.dirY;
+        p.moveX = 0;
+        p.moveY = 0;
+        p.dashTimer = 0;
+        p.dashCooldown = 0;
+        p.stunTimer = 0;
+      }
+      ball.x = FIELD_CENTER_X;
+      ball.y = FIELD_CENTER_Y;
+      ball.vx = 0;
+      ball.vy = 0;
+      ball.ownerId = null;
+      ball.lockOwnerId = null;
+      ball.lockTimer = 0;
+      ball.powerTrail = 0;
+      pointerInput.active = false;
+      pointerInput.dx = 0;
+      pointerInput.dy = 0;
+      getCameraOrigin(true);
+    }
+
+    function getLocalPlayer() {
+      if (isSpectator || !localPlayerId) return null;
+      return players.find((p) => p.id === localPlayerId) || null;
+    }
+
+    let camCurrentX = FIELD_CENTER_X - VIEW_W / 2;
+    let camCurrentY = FIELD_CENTER_Y - VIEW_H / 2;
+
+    // 自機を中心に滑らかに追従するカメラ座標を計算（画面揺れ・酔い防止）
+    function getCameraOrigin(snap = false) {
+      const me = getLocalPlayer();
+      const focusX = me ? me.x : ball.x;
+      const focusY = me ? me.y : ball.y;
+      const targetX = clamp(focusX - VIEW_W / 2, 0, WORLD_W - VIEW_W);
+      const targetY = clamp(focusY - VIEW_H / 2, 0, WORLD_H - VIEW_H);
+      if (snap) {
+        camCurrentX = targetX;
+        camCurrentY = targetY;
+      } else {
+        camCurrentX += (targetX - camCurrentX) * 0.14;
+        camCurrentY += (targetY - camCurrentY) * 0.14;
+      }
+      return {
+        x: camCurrentX,
+        y: camCurrentY,
+      };
+    }
+
+    // マウス／タッチ位置から「画面中央（自機）→ カーソル」の方向と距離に応じた速度倍率を求める
+    function updatePointerFromClient(clientX, clientY) {
+      if (isSpectator || isGameOver || Hitsumabushi.phase === 'over') return;
+      const me = getLocalPlayer();
+      if (!me) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const viewX = (clientX - rect.left) * (VIEW_W / rect.width);
+      const viewY = (clientY - rect.top) * (VIEW_H / rect.height);
+      const dx = viewX - VIEW_W / 2;
+      const dy = viewY - VIEW_H / 2;
+      const dist = Math.hypot(dx, dy);
+
+      // 自機の周囲（半径32px以内）は停止ゾーン、32〜150pxは距離に応じてゆっくり歩く〜走る
+      if (dist < 32) {
+        pointerInput.active = false;
+        pointerInput.dx = 0;
+        pointerInput.dy = 0;
+      } else {
+        const throttle = clamp((dist - 32) / 118, 0.15, 1.0);
+        pointerInput.active = true;
+        pointerInput.dx = (dx / dist) * throttle;
+        pointerInput.dy = (dy / dist) * throttle;
+      }
+      recomputeLocalMoveVector();
+    }
+
+    function recomputeLocalMoveVector() {
+      const me = getLocalPlayer();
+      if (!me) return;
+
+      let kx = 0;
+      let ky = 0;
+      if (keysDown.has('ArrowLeft') || keysDown.has('KeyA')) kx -= 1;
+      if (keysDown.has('ArrowRight') || keysDown.has('KeyD')) kx += 1;
+      if (keysDown.has('ArrowUp') || keysDown.has('KeyW')) ky -= 1;
+      if (keysDown.has('ArrowDown') || keysDown.has('KeyS')) ky += 1;
+
+      if (kx !== 0 || ky !== 0) {
+        const mag = Math.hypot(kx, ky);
+        me.moveX = kx / mag;
+        me.moveY = ky / mag;
+      } else if (pointerInput.active) {
+        me.moveX = pointerInput.dx;
+        me.moveY = pointerInput.dy;
+      } else {
+        me.moveX = 0;
+        me.moveY = 0;
+      }
+    }
+
+    // アクション発動：
+    // 1. 自分がドリブル保持中、または足元すぐ近くにフリーのボールがあるなら「シュート」！
+    // 2. それ以外（オフボール時）は「ダッシュ／スライディングタックル」！
+    function performActionFor(player) {
+      if (!player || player.stunTimer > 0) return false;
+
+      const norm = Math.hypot(player.dirX, player.dirY) || 1;
+      player.dirX /= norm;
+      player.dirY /= norm;
+
+      const isHoldingBall = ball.ownerId === player.id;
+      const distToFreeBall = ball.ownerId === null ? Math.hypot(ball.x - player.x, ball.y - player.y) : Infinity;
+
+      if (isHoldingBall || distToFreeBall <= PLAYER_RADIUS + BALL_RADIUS + 14) {
+        // シュート（強いキック）を発射！
+        ball.ownerId = null;
+        ball.lockOwnerId = player.id;
+        ball.lockTimer = STEAL_LOCK_FRAMES;
+        ball.x = player.x + player.dirX * (PLAYER_RADIUS + BALL_RADIUS + 4);
+        ball.y = player.y + player.dirY * (PLAYER_RADIUS + BALL_RADIUS + 4);
+        ball.vx = player.dirX * SHOOT_SPEED + player.vx * 0.25;
+        ball.vy = player.dirY * SHOOT_SPEED + player.vy * 0.25;
+        ball.powerTrail = 24;
+        return true;
+      }
+
+      // ボールを持っていないときはダッシュ／タックル
+      if (player.dashCooldown > 0) return false;
+      player.dashTimer = DASH_DURATION;
+      player.dashCooldown = DASH_COOLDOWN;
+      player.vx = player.dirX * DASH_SPEED;
+      player.vy = player.dirY * DASH_SPEED;
+      return true;
+    }
+
+    function requestLocalAction() {
+      if (isSpectator || isGameOver || Hitsumabushi.phase === 'over') return;
+      const me = getLocalPlayer();
+      if (!me) return;
+      const activated = performActionFor(me);
+      if (activated && !isGameMaster) {
+        Hitsumabushi.sendGameData({
+          type: 'INPUT_UPDATE',
+          moveX: Math.round(me.moveX * 100) / 100,
+          moveY: Math.round(me.moveY * 100) / 100,
+          dirX: Math.round(me.dirX * 100) / 100,
+          dirY: Math.round(me.dirY * 100) / 100,
+          action: true,
+        });
+      }
+    }
+
+    canvas.addEventListener('mousemove', (e) => updatePointerFromClient(e.clientX, e.clientY));
+    canvas.addEventListener('mouseleave', () => {
+      pointerInput.active = false;
+      recomputeLocalMoveVector();
+    });
+    canvas.addEventListener('mousedown', (e) => {
+      updatePointerFromClient(e.clientX, e.clientY);
+      if (e.button === 0) requestLocalAction();
+    });
+
+    const onTouchStart = (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (touch) updatePointerFromClient(touch.clientX, touch.clientY);
+    };
+    const onTouchMove = (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (touch) updatePointerFromClient(touch.clientX, touch.clientY);
+    };
+    const onTouchEnd = () => {
+      pointerInput.active = false;
+      recomputeLocalMoveVector();
+    };
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd);
+
+    dashBtn.addEventListener('click', () => requestLocalAction());
+
+    window.addEventListener('keydown', (e) => {
+      if (isSpectator || isGameOver || Hitsumabushi.phase === 'over') return;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+        keysDown.add(e.code);
+      }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        requestLocalAction();
+      }
+      recomputeLocalMoveVector();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      keysDown.delete(e.code);
+      recomputeLocalMoveVector();
+    });
+
+    function updateHeaderNames() {
+      const teamANames = players.filter((p) => p.teamId === 'team_a').map((p) => p.name).join(' & ');
+      const teamBNames = players.filter((p) => p.teamId === 'team_b').map((p) => p.name).join(' & ');
+      document.getElementById('teamAName').textContent = `🔵 CYAN (${teamANames || 'Team A'})`;
+      document.getElementById('teamBName').textContent = `🔴 MAGENTA (${teamBNames || 'Team B'})`;
+    }
+
+    function updateScoreUI() {
+      document.getElementById('scoreBoard').textContent = `${teamScores.team_a} - ${teamScores.team_b}`;
+    }
+
+    function updateTimerUI(force = false) {
+      const sec = Math.max(0, Math.ceil(remainingMs / 1000));
+      if (force || sec !== displayedSec) {
+        displayedSec = sec;
+        document.getElementById('timerDisplay').textContent = `${sec}s`;
+      }
+    }
+
+    function setStatus(text, isResult = false) {
+      if ((isGameOver || Hitsumabushi.phase === 'over') && !isResult) return;
+      const el = document.getElementById('statusMsg');
+      el.textContent = text;
+      el.classList.toggle('result', isResult);
+    }
+
+    function publishMatchStateIfMaster() {
+      if (isGameMaster && !isSpectator && !isGameOver && Hitsumabushi.phase !== 'over') {
+        Hitsumabushi.setMatchState({
+          teamScores: { ...teamScores },
+          remainingMs: Math.round(remainingMs),
+        });
+      }
+    }
+
+    function startMatchWithConfig(config) {
+      isGameOver = false;
+      teamScores = { team_a: 0, team_b: 0 };
+      remainingMs = MATCH_DURATION_MS;
+      displayedSec = 60;
+      lastTickAt = null;
+      lastSyncSentAt = 0;
+      lastInputSentAt = 0;
+      lastSentInputKey = '';
+      goalBannerTimer = 0;
+      goalBannerText = '';
+      keysDown.clear();
+      pointerInput.active = false;
+
+      localPlayerId = config.localPlayerId ?? null;
+      isSpectator = Hitsumabushi.isSpectator();
+      isGameMaster = Hitsumabushi.isGameMaster();
+
+      document.body.classList.toggle('spectating', isSpectator);
+      document.body.classList.toggle('transparent', !!config.isObsMode);
+      dashBtn.disabled = isSpectator;
+
+      configSeats = (config.players && config.players.length > 0)
+        ? config.players.map((p, idx) => ({
+            id: p.id ?? `p${idx + 1}`,
+            name: p.name ?? `Player ${idx + 1}`,
+            teamId: p.teamId ?? null,
+            isCpu: !!p.isCpu,
+          }))
+        : [
+            { id: 'p1', name: 'Player 1', teamId: null, isCpu: false },
+            { id: 'p2', name: 'Player 2', teamId: null, isCpu: false },
+          ];
+
+      players = buildPlayersFromSeats(configSeats);
+      resetPositions();
+
+      updateHeaderNames();
+      updateScoreUI();
+      updateTimerUI(true);
+      setStatus(isSpectator ? '👀 試合を観戦しています' : `${WIN_SCORE}点先取 または 60秒で勝利！`, false);
+      resizeCanvas();
+    }
+
+    Hitsumabushi.init({
+      onStartMatch: (config) => {
+        startMatchWithConfig(config);
+      },
+      onObsModeChange: (isObs) => {
+        document.body.classList.toggle('transparent', !!isObs);
+      },
+      onMatchState: (state) => {
+        if (!state || isGameOver || Hitsumabushi.phase === 'over') return;
+        if (state.teamScores) {
+          teamScores = {
+            team_a: Number(state.teamScores.team_a) || 0,
+            team_b: Number(state.teamScores.team_b) || 0,
+          };
+          updateScoreUI();
+        }
+        if (typeof state.remainingMs === 'number') {
+          remainingMs = state.remainingMs;
+          updateTimerUI(true);
+        }
+      },
+      onGameData: (payload, senderId) => {
+        if (Hitsumabushi.phase === 'over' || isGameOver || !payload) return;
+
+        if (payload.type === 'INPUT_UPDATE' && senderId) {
+          const p = players.find((pl) => pl.id === senderId);
+          if (!p) return;
+          p.moveX = Number(payload.moveX) || 0;
+          p.moveY = Number(payload.moveY) || 0;
+          if (typeof payload.dirX === 'number' && typeof payload.dirY === 'number') {
+            const dNorm = Math.hypot(payload.dirX, payload.dirY);
+            if (dNorm > 0) {
+              p.dirX = payload.dirX / dNorm;
+              p.dirY = payload.dirY / dNorm;
+            }
+          }
+          if (payload.action) {
+            performActionFor(p);
+          }
+          return;
+        }
+
+        if (payload.type === 'STATE_SYNC' && !isGameMaster) {
+          if (Array.isArray(payload.players)) {
+            for (const snap of payload.players) {
+              const p = players.find((pl) => pl.id === snap.id);
+              if (!p) continue;
+              p.x = snap.x;
+              p.y = snap.y;
+              p.vx = snap.vx;
+              p.vy = snap.vy;
+              p.dirX = snap.dirX;
+              p.dirY = snap.dirY;
+              p.dashTimer = snap.dashTimer;
+              p.dashCooldown = snap.dashCooldown;
+              p.stunTimer = snap.stunTimer;
+            }
+          }
+          if (payload.ball) {
+            ball.x = payload.ball.x;
+            ball.y = payload.ball.y;
+            ball.vx = payload.ball.vx;
+            ball.vy = payload.ball.vy;
+            ball.ownerId = payload.ball.ownerId ?? null;
+            ball.powerTrail = payload.ball.powerTrail || 0;
+          }
+          if (payload.teamScores) {
+            teamScores = payload.teamScores;
+            updateScoreUI();
+          }
+          if (typeof payload.remainingMs === 'number') {
+            remainingMs = payload.remainingMs;
+            updateTimerUI();
+          }
+          return;
+        }
+
+        if (payload.type === 'GOAL_SCORED' && !isGameMaster) {
+          teamScores = payload.teamScores || teamScores;
+          updateScoreUI();
+          goalBannerText = payload.scoringTeam === 'team_a' ? '🔵 CYAN GOAL!!' : '🔴 MAGENTA GOAL!!';
+          goalBannerTimer = 65;
+          resetPositions();
+          return;
+        }
+
+        if (payload.type === 'MATCH_END') {
+          if (payload.teamScores) {
+            teamScores = payload.teamScores;
+            updateScoreUI();
+          }
+          if (typeof payload.remainingMs === 'number') {
+            remainingMs = payload.remainingMs;
+            updateTimerUI(true);
+          }
+          finishMatch(payload.winnerTeam ?? null, { report: false });
+        }
+      },
+    });
+
+    function stepCpuAi(p) {
+      if (p.stunTimer > 0) {
+        p.moveX = 0;
+        p.moveY = 0;
+        return;
+      }
+
+      const attackGoalX = p.teamId === 'team_a' ? FIELD_RIGHT : FIELD_LEFT;
+      const defendGoalX = p.teamId === 'team_a' ? FIELD_LEFT + 140 : FIELD_RIGHT - 140;
+      const goalCenterY = FIELD_CENTER_Y;
+
+      // 自分がボールをドリブル保持している場合：相手ゴールへ向かって走り、射程に入ったらシュート！
+      if (ball.ownerId === p.id) {
+        const toGoalX = attackGoalX - p.x;
+        const toGoalY = goalCenterY - p.y;
+        const distToGoal = Math.hypot(toGoalX, toGoalY) || 1;
+        p.moveX = toGoalX / distToGoal;
+        p.moveY = toGoalY / distToGoal;
+        p.dirX = p.moveX;
+        p.dirY = p.moveY;
+
+        if (distToGoal < 420) {
+          performActionFor(p); // シュート！
+        }
+        return;
+      }
+
+      // 味方がボールを持っている場合：前線へ上がってサポート
+      const owner = ball.ownerId ? players.find((pl) => pl.id === ball.ownerId) : null;
+      if (owner && owner.teamId === p.teamId) {
+        const supportX = clamp(owner.x + (p.teamId === 'team_a' ? 220 : -220), FIELD_LEFT + 100, FIELD_RIGHT - 100);
+        const supportY = owner.y < FIELD_CENTER_Y ? FIELD_CENTER_Y + 180 : FIELD_CENTER_Y - 180;
+        const dx = supportX - p.x;
+        const dy = supportY - p.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 25) {
+          p.moveX = dx / dist;
+          p.moveY = dy / dist;
+        } else {
+          p.moveX = 0;
+          p.moveY = 0;
+        }
+        return;
+      }
+
+      // 相手がボールを持っている、またはルーズボールの場合
+      const distToBall = Math.hypot(ball.x - p.x, ball.y - p.y);
+      const sameTeamMates = players.filter((pl) => pl.teamId === p.teamId);
+      const isClosestOnTeam = sameTeamMates.every(
+        (mate) => Math.hypot(ball.x - mate.x, ball.y - mate.y) >= distToBall - 5
+      );
+
+      let targetX = ball.x;
+      let targetY = ball.y;
+      if (!isClosestOnTeam) {
+        // もう1人の味方がボールに行っているなら自陣側をカバー
+        targetX = (defendGoalX + ball.x) * 0.5;
+        targetY = clamp(ball.y * 0.7 + goalCenterY * 0.3, FIELD_TOP + 120, FIELD_BOTTOM - 120);
+      }
+
+      const dx = targetX - p.x;
+      const dy = targetY - p.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 8) {
+        p.moveX = dx / dist;
+        p.moveY = dy / dist;
+      } else {
+        p.moveX = 0;
+        p.moveY = 0;
+      }
+
+      // 相手ドリブラーが目の前にいるときはダッシュタックルで奪う！
+      if (owner && owner.teamId !== p.teamId && distToBall < 150 && p.dashCooldown <= 0) {
+        p.dirX = dx / (dist || 1);
+        p.dirY = dy / (dist || 1);
+        performActionFor(p);
+      }
+    }
+
+    function stepPhysics(dtMs) {
+      const dtScale = clamp((dtMs || 16.667) / 16.667, 0.25, 2.0);
+      remainingMs = Math.max(0, remainingMs - dtMs);
+      updateTimerUI();
+
+      if (goalBannerTimer > 0) {
+        goalBannerTimer = Math.max(0, goalBannerTimer - dtScale);
+      }
+      if (ball.lockTimer > 0) {
+        ball.lockTimer = Math.max(0, ball.lockTimer - dtScale);
+        if (ball.lockTimer <= 0) {
+          ball.lockOwnerId = null;
+        }
+      }
+
+      for (const p of players) {
+        if (p.isCpu) stepCpuAi(p);
+
+        if (p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - dtScale);
+
+        if (p.stunTimer > 0) {
+          p.stunTimer = Math.max(0, p.stunTimer - dtScale);
+          p.vx *= Math.pow(0.86, dtScale);
+          p.vy *= Math.pow(0.86, dtScale);
+          if (ball.ownerId === p.id) {
+            ball.ownerId = null;
+          }
+        } else if (p.dashTimer > 0) {
+          p.dashTimer = Math.max(0, p.dashTimer - dtScale);
+          p.vx = p.dirX * DASH_SPEED;
+          p.vy = p.dirY * DASH_SPEED;
+        } else {
+          const mag = Math.hypot(p.moveX, p.moveY);
+          const topSpeed = ball.ownerId === p.id ? DRIBBLE_SPEED : BASE_SPEED;
+          if (mag > 0.05) {
+            const throttle = Math.min(1, mag);
+            p.dirX = p.moveX / mag;
+            p.dirY = p.moveY / mag;
+            p.vx = p.dirX * topSpeed * throttle;
+            p.vy = p.dirY * topSpeed * throttle;
+          } else {
+            p.vx *= Math.pow(0.72, dtScale);
+            p.vy *= Math.pow(0.72, dtScale);
+          }
+        }
+
+        p.x = clamp(p.x + p.vx * dtScale, FIELD_LEFT + PLAYER_RADIUS, FIELD_RIGHT - PLAYER_RADIUS);
+        p.y = clamp(p.y + p.vy * dtScale, FIELD_TOP + PLAYER_RADIUS, FIELD_BOTTOM - PLAYER_RADIUS);
+      }
+
+      // プレイヤー同士の衝突 ＆ タックルによるボール奪取！
+      for (let i = 0; i < players.length; i++) {
+        for (let j = i + 1; j < players.length; j++) {
+          const a = players[i];
+          const b = players[j];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy) || 0.001;
+          const minDist = PLAYER_RADIUS * 2;
+          if (dist < minDist) {
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const overlap = (minDist - dist) / 2;
+            a.x = clamp(a.x - nx * overlap, FIELD_LEFT + PLAYER_RADIUS, FIELD_RIGHT - PLAYER_RADIUS);
+            a.y = clamp(a.y - ny * overlap, FIELD_TOP + PLAYER_RADIUS, FIELD_BOTTOM - PLAYER_RADIUS);
+            b.x = clamp(b.x + nx * overlap, FIELD_LEFT + PLAYER_RADIUS, FIELD_RIGHT - PLAYER_RADIUS);
+            b.y = clamp(b.y + ny * overlap, FIELD_TOP + PLAYER_RADIUS, FIELD_BOTTOM - PLAYER_RADIUS);
+
+            if (a.teamId !== b.teamId) {
+              if (a.dashTimer > 0 && b.dashTimer === 0 && b.stunTimer === 0) {
+                b.stunTimer = STUN_DURATION;
+                b.vx = nx * 10.5;
+                b.vy = ny * 10.5;
+                if (ball.ownerId === b.id) {
+                  // タックル成功でそのまま奪取！
+                  ball.ownerId = a.id;
+                  ball.lockOwnerId = b.id;
+                  ball.lockTimer = STEAL_LOCK_FRAMES;
+                }
+              } else if (b.dashTimer > 0 && a.dashTimer === 0 && a.stunTimer === 0) {
+                a.stunTimer = STUN_DURATION;
+                a.vx = -nx * 10.5;
+                a.vy = -ny * 10.5;
+                if (ball.ownerId === a.id) {
+                  ball.ownerId = b.id;
+                  ball.lockOwnerId = a.id;
+                  ball.lockTimer = STEAL_LOCK_FRAMES;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // ドリブル保持中のボール追従、またはルーズボールのトラップ判定
+      if (ball.ownerId !== null) {
+        const owner = players.find((p) => p.id === ball.ownerId);
+        if (!owner || owner.stunTimer > 0) {
+          ball.ownerId = null;
+        } else {
+          // 選手の足元（進行方向の少し前）にボールを置いて運ぶ
+          const holdDist = PLAYER_RADIUS + BALL_RADIUS - 2;
+          ball.x = clamp(owner.x + owner.dirX * holdDist, FIELD_LEFT + BALL_RADIUS, FIELD_RIGHT - BALL_RADIUS);
+          ball.y = clamp(owner.y + owner.dirY * holdDist, FIELD_TOP + BALL_RADIUS, FIELD_BOTTOM - BALL_RADIUS);
+          ball.vx = owner.vx;
+          ball.vy = owner.vy;
+
+          // 他の相手選手がボール自体に直接触れた場合の奪取判定
+          for (const other of players) {
+            if (other.id === owner.id || other.teamId === owner.teamId || other.stunTimer > 0) continue;
+            if (ball.lockOwnerId === other.id && ball.lockTimer > 0) continue;
+            const dBall = Math.hypot(ball.x - other.x, ball.y - other.y);
+            if (dBall < PLAYER_RADIUS + BALL_RADIUS - 2) {
+              // ダッシュ中または正面からのカットで奪う
+              ball.ownerId = other.id;
+              ball.lockOwnerId = owner.id;
+              ball.lockTimer = STEAL_LOCK_FRAMES;
+              owner.stunTimer = Math.max(owner.stunTimer, 12);
+              break;
+            }
+          }
+        }
+      } else {
+        // ルーズボールの物理移動（芝生の摩擦でしっかり減速する）
+        ball.x += ball.vx * dtScale;
+        ball.y += ball.vy * dtScale;
+        ball.vx *= Math.pow(BALL_FRICTION, dtScale);
+        ball.vy *= Math.pow(BALL_FRICTION, dtScale);
+        if (Math.hypot(ball.vx, ball.vy) < 0.15) {
+          ball.vx = 0;
+          ball.vy = 0;
+        }
+        if (ball.powerTrail > 0) ball.powerTrail = Math.max(0, ball.powerTrail - dtScale);
+
+        // 選手がルーズボールに触れたら弾き飛ばさず足元にトラップ（ドリブル開始）！
+        for (const p of players) {
+          if (p.stunTimer > 0) continue;
+          if (ball.lockOwnerId === p.id && ball.lockTimer > 0) continue;
+          const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
+          if (dist <= PLAYER_RADIUS + BALL_RADIUS + 2) {
+            ball.ownerId = p.id;
+            ball.powerTrail = 0;
+            break;
+          }
+        }
+      }
+
+      // ゴール＆壁バウンド判定
+      if (ball.y - BALL_RADIUS < FIELD_TOP) {
+        ball.y = FIELD_TOP + BALL_RADIUS;
+        ball.vy = Math.abs(ball.vy) * BALL_WALL_RESTITUTION;
+      } else if (ball.y + BALL_RADIUS > FIELD_BOTTOM) {
+        ball.y = FIELD_BOTTOM - BALL_RADIUS;
+        ball.vy = -Math.abs(ball.vy) * BALL_WALL_RESTITUTION;
+      }
+
+      const inGoalMouthY = ball.y >= GOAL_TOP && ball.y <= GOAL_BOTTOM;
+      if (!inGoalMouthY) {
+        if (ball.x - BALL_RADIUS < FIELD_LEFT) {
+          ball.x = FIELD_LEFT + BALL_RADIUS;
+          ball.vx = Math.abs(ball.vx) * BALL_WALL_RESTITUTION;
+        } else if (ball.x + BALL_RADIUS > FIELD_RIGHT) {
+          ball.x = FIELD_RIGHT - BALL_RADIUS;
+          ball.vx = -Math.abs(ball.vx) * BALL_WALL_RESTITUTION;
+        }
+      } else {
+        if (ball.x < FIELD_LEFT - 4) {
+          scoreGoal('team_b');
+          return;
+        }
+        if (ball.x > FIELD_RIGHT + 4) {
+          scoreGoal('team_a');
+          return;
+        }
+      }
+
+      // タイムアップ判定
+      if (remainingMs <= 0) {
+        const winnerTeam =
+          teamScores.team_a > teamScores.team_b
+            ? 'team_a'
+            : teamScores.team_b > teamScores.team_a
+            ? 'team_b'
+            : null;
+        Hitsumabushi.sendGameData({
+          type: 'MATCH_END',
+          winnerTeam,
+          teamScores,
+          remainingMs: 0,
+        });
+        finishMatch(winnerTeam, { report: true });
+      }
+    }
+
+    function scoreGoal(scoringTeam) {
+      if (isGameOver || Hitsumabushi.phase === 'over') return;
+      teamScores[scoringTeam] += 1;
+      updateScoreUI();
+      goalBannerText = scoringTeam === 'team_a' ? '🔵 CYAN GOAL!!' : '🔴 MAGENTA GOAL!!';
+      goalBannerTimer = 65;
+
+      if (teamScores[scoringTeam] >= WIN_SCORE) {
+        if (isGameMaster && !isSpectator) {
+          Hitsumabushi.sendGameData({
+            type: 'MATCH_END',
+            winnerTeam: scoringTeam,
+            teamScores,
+            remainingMs: Math.round(remainingMs),
+          });
+        }
+        finishMatch(scoringTeam, { report: isGameMaster && !isSpectator });
+        return;
+      }
+
+      resetPositions();
+      if (isGameMaster && !isSpectator) {
+        Hitsumabushi.sendGameData({
+          type: 'GOAL_SCORED',
+          scoringTeam,
+          teamScores,
+        });
+        publishMatchStateIfMaster();
+      }
+    }
+
+    function finishMatch(winnerTeam, { report }) {
+      isGameOver = true;
+      dashBtn.disabled = true;
+
+      const me = getLocalPlayer();
+      const myTeam = me ? me.teamId : 'team_a';
+      let label = '';
+      if (winnerTeam === null) {
+        label = '引き分け！🤝';
+      } else if (isSpectator) {
+        label = `${winnerTeam === 'team_a' ? 'CYAN TEAM' : 'MAGENTA TEAM'} の勝利！🎉`;
+      } else {
+        label = myTeam === winnerTeam ? 'あなたのチームの勝利！🎉' : '相手チームの勝利！💥';
+      }
+      setStatus(label, true);
+
+      if (report && !isSpectator) {
+        const scoresBySeat = {};
+        configSeats.forEach((seat, idx) => {
+          const t = resolveSeatTeam(seat, idx, configSeats);
+          scoresBySeat[seat.id] = teamScores[t];
+        });
+
+        if (winnerTeam === null) {
+          Hitsumabushi.sendGameOver({
+            isTie: true,
+            winnerPlayerId: null,
+            scores: scoresBySeat,
+          });
+        } else {
+          const winners = configSeats
+            .filter((seat, idx) => resolveSeatTeam(seat, idx, configSeats) === winnerTeam)
+            .map((seat) => seat.id);
+          const losers = configSeats
+            .filter((seat, idx) => resolveSeatTeam(seat, idx, configSeats) !== winnerTeam)
+            .map((seat) => seat.id);
+          const winnerPlayerId = winners[0] || configSeats[0].id;
+          const rankings = [...winners, ...losers];
+
+          // Find the portal teamId of the winning side's seats.
+          let portalWinnerTeamId = null;
+          configSeats.forEach((seat, idx) => {
+            if (portalWinnerTeamId == null && resolveSeatTeam(seat, idx, configSeats) === winnerTeam && seat.teamId != null && seat.teamId !== '') {
+              portalWinnerTeamId = seat.teamId;
+            }
+          });
+
+          const resultPayload = {
+            winnerPlayerId,
+            rankings,
+            scores: scoresBySeat,
+          };
+          if (portalWinnerTeamId != null) {
+            resultPayload.winnerTeamId = portalWinnerTeamId;
+          }
+          Hitsumabushi.sendGameOver(resultPayload);
+        }
+      }
+    }
+
+    function maybeSendInput(now) {
+      if (isGameMaster || isSpectator || isGameOver || Hitsumabushi.phase === 'over') return;
+      const me = getLocalPlayer();
+      if (!me) return;
+      if (now - lastInputSentAt < INPUT_INTERVAL_MS) return;
+
+      const mx = Math.round(me.moveX * 100) / 100;
+      const my = Math.round(me.moveY * 100) / 100;
+      const dx = Math.round(me.dirX * 100) / 100;
+      const dy = Math.round(me.dirY * 100) / 100;
+      const inputKey = `${mx},${my},${dx},${dy}`;
+      if (inputKey === lastSentInputKey) return;
+
+      lastInputSentAt = now;
+      if (
+        Hitsumabushi.sendGameData({
+          type: 'INPUT_UPDATE',
+          moveX: mx,
+          moveY: my,
+          dirX: dx,
+          dirY: dy,
+          action: false,
+        })
+      ) {
+        lastSentInputKey = inputKey;
+      }
+    }
+
+    function maybeSendStateSync(now) {
+      if (!isGameMaster || isSpectator || isGameOver || Hitsumabushi.phase === 'over') return;
+      if (now - lastSyncSentAt < SYNC_INTERVAL_MS) return;
+      lastSyncSentAt = now;
+
+      Hitsumabushi.sendGameData({
+        type: 'STATE_SYNC',
+        players: players.map((p) => ({
+          id: p.id,
+          x: Math.round(p.x),
+          y: Math.round(p.y),
+          vx: Math.round(p.vx * 10) / 10,
+          vy: Math.round(p.vy * 10) / 10,
+          dirX: Math.round(p.dirX * 100) / 100,
+          dirY: Math.round(p.dirY * 100) / 100,
+          dashTimer: p.dashTimer,
+          dashCooldown: p.dashCooldown,
+          stunTimer: p.stunTimer,
+        })),
+        ball: {
+          x: Math.round(ball.x),
+          y: Math.round(ball.y),
+          vx: Math.round(ball.vx * 10) / 10,
+          vy: Math.round(ball.vy * 10) / 10,
+          ownerId: ball.ownerId,
+          powerTrail: ball.powerTrail,
+        },
+        teamScores,
+        remainingMs: Math.round(remainingMs),
+      });
+    }
+
+    // 画面外のオブジェクト（ボールや相手ゴール）の方向を画面端に示すナビマーカー
+    function drawOffscreenIndicator(camX, camY, targetX, targetY, color, labelText) {
+      const screenX = targetX - camX;
+      const screenY = targetY - camY;
+      const margin = 28;
+      if (
+        screenX >= margin &&
+        screenX <= VIEW_W - margin &&
+        screenY >= margin &&
+        screenY <= VIEW_H - margin
+      ) {
+        return; // 画面内に映っている場合は不要
+      }
+
+      const cx = VIEW_W / 2;
+      const cy = VIEW_H / 2;
+      const dx = screenX - cx;
+      const dy = screenY - cy;
+      const angle = Math.atan2(dy, dx);
+
+      const halfW = VIEW_W / 2 - margin;
+      const halfH = VIEW_H / 2 - margin;
+      const scaleX = Math.abs(dx) > 0.001 ? halfW / Math.abs(dx) : Infinity;
+      const scaleY = Math.abs(dy) > 0.001 ? halfH / Math.abs(dy) : Infinity;
+      const t = Math.min(scaleX, scaleY);
+
+      const indX = cx + dx * t;
+      const indY = cy + dy * t;
+
+      ctx.save();
+      ctx.translate(indX, indY);
+      ctx.rotate(angle);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(-8, -8);
+      ctx.lineTo(-8, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = color;
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(labelText, indX, indY - 12);
+    }
+
+    // 右上にコート全体のミニレーダーを描画
+    function drawMiniMap() {
+      const mapW = 136;
+      const mapH = 82;
+      const mapX = VIEW_W - mapW - 12;
+      const mapY = 12;
+
+      ctx.fillStyle = 'rgba(10, 14, 24, 0.82)';
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(mapX, mapY, mapW, mapH);
+      ctx.strokeRect(mapX, mapY, mapW, mapH);
+
+      // Center line on minimap
+      ctx.beginPath();
+      ctx.moveTo(mapX + mapW / 2, mapY);
+      ctx.lineTo(mapX + mapW / 2, mapY + mapH);
+      ctx.stroke();
+
+      const toMapX = (wx) => mapX + ((wx - FIELD_LEFT) / (FIELD_RIGHT - FIELD_LEFT)) * mapW;
+      const toMapY = (wy) => mapY + ((wy - FIELD_TOP) / (FIELD_BOTTOM - FIELD_TOP)) * mapH;
+
+      for (const p of players) {
+        ctx.fillStyle = p.id === localPlayerId ? '#39ff14' : p.teamId === 'team_a' ? '#00f0ff' : '#ff007f';
+        ctx.beginPath();
+        ctx.arc(clamp(toMapX(p.x), mapX + 3, mapX + mapW - 3), clamp(toMapY(p.y), mapY + 3, mapY + mapH - 3), 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = '#ffe600';
+      ctx.beginPath();
+      ctx.arc(clamp(toMapX(ball.x), mapX + 3, mapX + mapW - 3), clamp(toMapY(ball.y), mapY + 3, mapY + mapH - 3), 3.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+
+      // スタジアム外の暗色背景
+      ctx.fillStyle = '#060911';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      const cam = getCameraOrigin();
+      ctx.save();
+      ctx.translate(-cam.x, -cam.y);
+
+      // 芝生ストライプ（14分割）
+      const stripeCount = 14;
+      const pitchW = FIELD_RIGHT - FIELD_LEFT;
+      const pitchH = FIELD_BOTTOM - FIELD_TOP;
+      const stripeW = pitchW / stripeCount;
+      for (let i = 0; i < stripeCount; i++) {
+        ctx.fillStyle = i % 2 === 0 ? '#0d1b2a' : '#112236';
+        ctx.fillRect(FIELD_LEFT + i * stripeW, FIELD_TOP, stripeW, pitchH);
+      }
+
+      // フィールド外枠・白線
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.42)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(FIELD_LEFT, FIELD_TOP, pitchW, pitchH);
+
+      // センターライン＆センターサークル
+      ctx.beginPath();
+      ctx.moveTo(FIELD_CENTER_X, FIELD_TOP);
+      ctx.lineTo(FIELD_CENTER_X, FIELD_BOTTOM);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(FIELD_CENTER_X, FIELD_CENTER_Y, 130, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
+      ctx.beginPath();
+      ctx.arc(FIELD_CENTER_X, FIELD_CENTER_Y, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ペナルティエリア＆ゴールエリア
+      const penW = 240;
+      const penH = 520;
+      ctx.strokeRect(FIELD_LEFT, FIELD_CENTER_Y - penH / 2, penW, penH);
+      ctx.strokeRect(FIELD_RIGHT - penW, FIELD_CENTER_Y - penH / 2, penW, penH);
+
+      // 左ゴール（Team A Cyan）
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.18)';
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 4;
+      ctx.fillRect(FIELD_LEFT - GOAL_DEPTH, GOAL_TOP, GOAL_DEPTH, GOAL_BOTTOM - GOAL_TOP);
+      ctx.strokeRect(FIELD_LEFT - GOAL_DEPTH, GOAL_TOP, GOAL_DEPTH, GOAL_BOTTOM - GOAL_TOP);
+
+      // 右ゴール（Team B Magenta）
+      ctx.fillStyle = 'rgba(255, 0, 127, 0.18)';
+      ctx.strokeStyle = '#ff007f';
+      ctx.lineWidth = 4;
+      ctx.fillRect(FIELD_RIGHT, GOAL_TOP, GOAL_DEPTH, GOAL_BOTTOM - GOAL_TOP);
+      ctx.strokeRect(FIELD_RIGHT, GOAL_TOP, GOAL_DEPTH, GOAL_BOTTOM - GOAL_TOP);
+
+      // 選手描画
+      for (const p of players) {
+        const isTeamA = p.teamId === 'team_a';
+        const mainColor = isTeamA ? '#00f0ff' : '#ff007f';
+
+        // ドリブル保持中の足元リング
+        if (ball.ownerId === p.id) {
+          ctx.strokeStyle = '#ffe600';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, PLAYER_RADIUS + 9, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // ダッシュオーラ
+        if (p.dashTimer > 0) {
+          ctx.strokeStyle = '#39ff14';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, PLAYER_RADIUS + 6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // 選手本体
+        ctx.fillStyle = mainColor;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 自機ハイライト
+        if (p.id === localPlayerId && !isSpectator) {
+          ctx.strokeStyle = '#39ff14';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, PLAYER_RADIUS + 2, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // 向いている方向のノーズマーカー
+        ctx.fillStyle = '#0a0b10';
+        ctx.beginPath();
+        ctx.arc(p.x + p.dirX * 11, p.y + p.dirY * 11, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // スタン表示
+        if (p.stunTimer > 0) {
+          ctx.fillStyle = '#ffe600';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('★💫★', p.x, p.y - PLAYER_RADIUS - 10);
+        }
+
+        // プレイヤー名
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, p.x, p.y + PLAYER_RADIUS + 16);
+      }
+
+      // シュート軌跡エフェクト
+      if (ball.powerTrail > 0) {
+        ctx.fillStyle = 'rgba(57, 255, 20, 0.36)';
+        ctx.beginPath();
+        ctx.arc(ball.x - ball.vx * 1.3, ball.y - ball.vy * 1.3, BALL_RADIUS * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // サッカーボール本体
+      ctx.fillStyle = ball.powerTrail > 0 ? '#39ff14' : '#ffe600';
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      ctx.restore();
+
+      // 画面外ナビマーカー（ボール位置 ＆ 攻めるべき相手ゴール位置）
+      drawOffscreenIndicator(cam.x, cam.y, ball.x, ball.y, '#ffe600', '⚽ BALL');
+      const me = getLocalPlayer();
+      if (me) {
+        const targetGoalX = me.teamId === 'team_a' ? FIELD_RIGHT : FIELD_LEFT;
+        const targetGoalColor = me.teamId === 'team_a' ? '#ff007f' : '#00f0ff';
+        drawOffscreenIndicator(cam.x, cam.y, targetGoalX, FIELD_CENTER_Y, targetGoalColor, '🥅 GOAL');
+      }
+
+      // ミニレーダー描画
+      drawMiniMap();
+
+      // ゴール決着バナー
+      if (goalBannerTimer > 0) {
+        ctx.fillStyle = 'rgba(10, 11, 16, 0.78)';
+        ctx.fillRect(VIEW_W / 2 - 180, VIEW_H / 2 - 36, 360, 72);
+        ctx.strokeStyle = '#ffe600';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(VIEW_W / 2 - 180, VIEW_H / 2 - 36, 360, 72);
+        ctx.fillStyle = '#ffe600';
+        ctx.font = '900 32px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(goalBannerText, VIEW_W / 2, VIEW_H / 2);
+        ctx.textBaseline = 'alphabetic';
+      }
+    }
+
+    function gameLoop(now) {
+      if (Hitsumabushi.phase === 'over') {
+        isGameOver = true;
+      }
+
+      if (lastTickAt === null) {
+        lastTickAt = now;
+      }
+      const dtMs = clamp(now - lastTickAt, 0, 50);
+      const dtScale = clamp((dtMs || 16.667) / 16.667, 0.25, 2.0);
+      lastTickAt = now;
+
+      if (goalBannerTimer > 0 && !isGameMaster) {
+        goalBannerTimer = Math.max(0, goalBannerTimer - dtScale);
+      }
+
+      if (!isGameOver) {
+        if (isGameMaster) {
+          stepPhysics(dtMs);
+          maybeSendStateSync(now);
+        }
+        if (!isSpectator) {
+          maybeSendInput(now);
+        }
+      } else if (goalBannerTimer > 0 && isGameMaster) {
+        goalBannerTimer = Math.max(0, goalBannerTimer - dtScale);
+      }
+
+      render();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // テスト用フック
+    window.__soccerTest = {
+      triggerGoal: (scoringTeam = 'team_a') => scoreGoal(scoringTeam),
+      triggerTimeUp: () => {
+        remainingMs = 0;
+        stepPhysics(16);
+      },
+      triggerDash: () => requestLocalAction(),
+      getState: () => ({ teamScores, remainingMs, players, ball, isGameOver, goalBannerTimer }),
+    };
+
+    // スタンドアロン直接起動時のフォールバック（2対2 CPU戦）
+    if (window.parent === window) {
+      setTimeout(() => {
+        if (Hitsumabushi.phase === 'waiting') {
+          isGameMaster = true;
+          startMatchWithConfig({
+            localPlayerId: 'p1',
+            isObsMode: false,
+            players: [
+              { id: 'p1', name: 'あなた', teamId: 'team_a', isCpu: false },
+              { id: 'p2', name: 'CPU ライバル', teamId: 'team_b', isCpu: true },
+              { id: 'p3', name: 'CPU パートナー', teamId: 'team_a', isCpu: true },
+              { id: 'p4', name: 'CPU ディフェンダー', teamId: 'team_b', isCpu: true },
+            ],
+          });
+          isGameMaster = true;
+        }
+      }, 200);
+    }
+
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
