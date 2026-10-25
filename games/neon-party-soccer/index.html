@@ -1283,20 +1283,9 @@
         if (winnerTeam === null) {
           Hitsumabushi.sendGameOver({
             isTie: true,
-            winnerPlayerId: null,
             scores: scoresBySeat,
           });
         } else {
-          const winners = configSeats
-            .filter((seat, idx) => resolveSeatTeam(seat, idx, configSeats) === winnerTeam)
-            .map((seat) => seat.id);
-          const losers = configSeats
-            .filter((seat, idx) => resolveSeatTeam(seat, idx, configSeats) !== winnerTeam)
-            .map((seat) => seat.id);
-          const winnerPlayerId = winners[0] || configSeats[0].id;
-          const rankings = [...winners, ...losers];
-
-          // Find the portal teamId of the winning side's seats.
           let portalWinnerTeamId = null;
           configSeats.forEach((seat, idx) => {
             if (portalWinnerTeamId == null && resolveSeatTeam(seat, idx, configSeats) === winnerTeam && seat.teamId != null && seat.teamId !== '') {
@@ -1304,15 +1293,18 @@
             }
           });
 
-          const resultPayload = {
-            winnerPlayerId,
-            rankings,
-            scores: scoresBySeat,
-          };
           if (portalWinnerTeamId != null) {
-            resultPayload.winnerTeamId = portalWinnerTeamId;
+            Hitsumabushi.sendGameOver({
+              winnerTeamId: portalWinnerTeamId,
+              scores: scoresBySeat,
+            });
+          } else {
+            const winnerSeat = configSeats.find((seat, idx) => resolveSeatTeam(seat, idx, configSeats) === winnerTeam) || configSeats[0];
+            Hitsumabushi.sendGameOver({
+              winnerPlayerId: winnerSeat.id,
+              scores: scoresBySeat,
+            });
           }
-          Hitsumabushi.sendGameOver(resultPayload);
         }
       }
     }
