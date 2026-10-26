@@ -244,7 +244,7 @@
     <div class="footer-info">1手10秒制限 / 揃えてネオン勝利！</div>
   </div>
 
-  <script src="https://milightpartner.jp/sdk/0.20.0/hitsumabushi-sdk.js"></script>
+  <script src="https://milightpartner.jp/sdk/0.26.0/hitsumabushi-sdk.js"></script>
   <script>
     // ゲームステート
     var board = [null, null, null, null, null, null, null, null, null];
@@ -440,7 +440,6 @@
         // スコア更新 & 勝敗送信（観戦者は送信しない）
         if (!isSpectator) {
           var scores = { p1: winner === 'p1' ? 1 : 0, p2: winner === 'p2' ? 1 : 0 };
-          Hitsumabushi.sendScoreUpdate(scores);
           Hitsumabushi.sendGameOver({
             winnerPlayerId: winner,
             rankings: winner === 'p1' ? ['p1', 'p2'] : ['p2', 'p1'],
@@ -457,7 +456,6 @@
           var drawScores = { p1: 0, p2: 0 };
           Hitsumabushi.sendGameOver({
             winnerPlayerId: null,
-            rankings: ['p1', 'p2'],
             isTie: true,
             scores: drawScores
           });
@@ -564,7 +562,6 @@
         }
 
         var scores = { p1: winner === 'p1' ? 1 : 0, p2: winner === 'p2' ? 1 : 0 };
-        Hitsumabushi.sendScoreUpdate(scores);
         Hitsumabushi.sendGameOver({
           winnerPlayerId: winner,
           rankings: winner === 'p1' ? ['p1', 'p2'] : ['p2', 'p1'],
