@@ -534,24 +534,27 @@
         renderPlayerBars();
       }
 
-      var TEAM_NAMES = {
-        team_a: 'チーム・シアン',
-        team_b: 'チーム・マゼンタ',
-        team_c: 'チーム・イエロー',
-        team_d: 'チーム・グリーン'
+      // 公式のチーム ID の名前と色（ゲームマニフェスト仕様書 §4.2）。
+      // プレイヤーの color は各自が選んだ色で、チームの色ではないため使わない
+      var TEAMS = {
+        team_a: { name: 'チーム・シアン', color: '#00f0ff' },
+        team_b: { name: 'チーム・マゼンタ', color: '#ff007f' },
+        team_c: { name: 'チーム・イエロー', color: '#ffe600' },
+        team_d: { name: 'チーム・グリーン', color: '#39ff14' }
       };
 
       // チームは teamId ごとにまとめる。2チームでも team_a / team_b とは限らない
       // （ペアの大会では team_c 対 team_d なども来る）ので、値をそのまま使う。
-      // 色は、同じチームのプレイヤーに同じ色が届くので、その color を使う
+      // 公式に無い ID が来たら、ID と最初のプレイヤーの色をそのまま見せる
       function groupTeams() {
         var teams = {};
         playersList.forEach(function (p) {
           if (!teams[p.teamId]) {
+            var official = TEAMS[p.teamId];
             teams[p.teamId] = {
               id: p.teamId,
-              name: TEAM_NAMES[p.teamId] || p.teamId,
-              color: p.color,
+              name: official ? official.name : p.teamId,
+              color: official ? official.color : p.color,
               score: 0,
               members: []
             };
