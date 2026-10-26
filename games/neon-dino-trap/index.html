@@ -533,7 +533,7 @@
     </div>
   </div>
 
-  <script src="https://milightpartner.jp/sdk/0.20.0/hitsumabushi-sdk.js"></script>
+  <script src="https://milightpartner.jp/sdk/0.26.0/hitsumabushi-sdk.js"></script>
   <script>
     /* ==========================================================================
        ゲーム定数＆初期設定
@@ -580,6 +580,8 @@
        対戦ステート＆プレイヤー管理
        ========================================================================== */
     var localPlayerId = null;
+    // 席にいるプレイヤーの id（config.players）。1人で遊ぶときは p1 だけ
+    var seatIds = [];
     var isSpectator = false;
     var isGameMaster = false;
     var isPvpMode = false;
@@ -652,6 +654,7 @@
         localPlayerId = isSpectator ? null : (config.localPlayerId || 'p1');
         isGameMaster = Hitsumabushi.isGameMaster();
         var players = config.players || [];
+        seatIds = players.map(function (p) { return p.id; });
 
         // 対戦相手が人間かどうか判定
         var hasHumanOpponent = false;
@@ -842,13 +845,6 @@
       scores[currentRunner].hp = hpRemaining;
       scores[currentRunner].totalScore = roundScore;
 
-      if (!isSpectator) {
-        Hitsumabushi.sendScoreUpdate({
-          p1: scores.p1.totalScore,
-          p2: scores.p2.totalScore
-        }, currentRound);
-      }
-
       if (currentRound === 1) {
         // Round 1 終了 ➔ 攻守交代 (SWITCH)
         currentPhase = 'SWITCH';
@@ -910,12 +906,16 @@
       btnStartPvp.style.display = 'none';
 
       if (!isSpectator) {
-        Hitsumabushi.sendGameOver({
-          winnerPlayerId: winnerId,
-          rankings: isTie ? ['p1', 'p2'] : (winnerId === 'p1' ? ['p1', 'p2'] : ['p2', 'p1']),
-          isTie: isTie,
-          scores: { p1: p1Score, p2: p2Score }
-        });
+        // 結果に入れるのは席にいるプレイヤーだけ（SDK が席にいない ID を含む結果を送らないため）。
+        // 1人で遊ぶときの CPU（p2）は席にいないので、CPU が勝ったら勝者なしで報告する
+        var result = { isTie: isTie, scores: {} };
+        seatIds.forEach(function (id) { result.scores[id] = scores[id].totalScore; });
+        if (!isTie && seatIds.indexOf(winnerId) !== -1) {
+          result.winnerPlayerId = winnerId;
+          result.rankings = (winnerId === 'p1' ? ['p1', 'p2'] : ['p2', 'p1'])
+            .filter(function (id) { return seatIds.indexOf(id) !== -1; });
+        }
+        Hitsumabushi.sendGameOver(result);
       }
     }
 
