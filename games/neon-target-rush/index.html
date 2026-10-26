@@ -408,7 +408,7 @@
   </div>
 
   <!-- Hitsumabushi SDK (IIFE build) -->
-  <script src="https://milightpartner.jp/sdk/0.20.0/hitsumabushi-sdk.js"></script>
+  <script src="https://milightpartner.jp/sdk/0.26.0/hitsumabushi-sdk.js"></script>
   <script>
     (function () {
       // --- 音響システム (Web Audio API) ---
@@ -534,30 +534,40 @@
         renderPlayerBars();
       }
 
+      var TEAM_NAMES = {
+        team_a: 'チーム・シアン',
+        team_b: 'チーム・マゼンタ',
+        team_c: 'チーム・イエロー',
+        team_d: 'チーム・グリーン'
+      };
+
+      // チームは teamId ごとにまとめる。2チームでも team_a / team_b とは限らない
+      // （ペアの大会では team_c 対 team_d なども来る）ので、値をそのまま使う。
+      // 色は、同じチームのプレイヤーに同じ色が届くので、その color を使う
+      function groupTeams() {
+        var teams = {};
+        playersList.forEach(function (p) {
+          if (!teams[p.teamId]) {
+            teams[p.teamId] = {
+              id: p.teamId,
+              name: TEAM_NAMES[p.teamId] || p.teamId,
+              color: p.color,
+              score: 0,
+              members: []
+            };
+          }
+          teams[p.teamId].members.push(p.name);
+          teams[p.teamId].score += (scores[p.id] || 0);
+        });
+        return Object.keys(teams).map(function (id) { return teams[id]; });
+      }
+
       function renderPlayerBars() {
         playerBarsContainer.innerHTML = '';
 
         if (isTeamBattle) {
-          // チーム戦表示: Team 1 (A) vs Team 2 (B)
-          var teams = {};
-          playersList.forEach(function (p) {
-            var rawTId = p.teamId || 'team_a';
-            var tId = (rawTId === 'teamA' || rawTId === 'team_a') ? 'team_a' : 'team_b';
-            if (!teams[tId]) {
-              teams[tId] = {
-                id: tId,
-                name: tId === 'team_a' ? 'チーム・シアン' : 'チーム・マゼンタ',
-                color: tId === 'team_a' ? '#00f0ff' : '#ff007f',
-                score: 0,
-                members: []
-              };
-            }
-            teams[tId].members.push(p.name);
-            teams[tId].score += (scores[p.id] || 0);
-          });
-
-          Object.keys(teams).forEach(function (tId) {
-            var team = teams[tId];
+          // チーム戦表示: チームごとに1行
+          groupTeams().forEach(function (team) {
             var pct = Math.min(100, Math.max(0, (team.score / goalScore) * 100));
 
             var row = document.createElement('div');
@@ -696,7 +706,6 @@
 
       function broadcastScore() {
         if (window.Hitsumabushi && !Hitsumabushi.isSpectator() && localPlayerId) {
-          Hitsumabushi.sendScoreUpdate(scores);
           Hitsumabushi.sendGameData({
             type: 'SCORE_SYNC',
             playerId: localPlayerId,
@@ -712,14 +721,10 @@
         var winnerName = '';
 
         if (isTeamBattle) {
-          var teamScores = {};
-          playersList.forEach(function (p) {
-            var rawTId = p.teamId || 'team_a';
-            var tId = (rawTId === 'teamA' || rawTId === 'team_a') ? 'team_a' : 'team_b';
-            teamScores[tId] = (teamScores[tId] || 0) + (scores[p.id] || 0);
-            if (teamScores[tId] >= goalScore && !winnerId) {
-              winnerId = tId;
-              winnerName = tId === 'team_a' ? 'チーム・シアン' : 'チーム・マゼンタ';
+          groupTeams().forEach(function (team) {
+            if (team.score >= goalScore && !winnerId) {
+              winnerId = team.id;
+              winnerName = team.name;
             }
           });
         } else {
@@ -753,11 +758,10 @@
         gameoverOverlay.style.display = 'flex';
 
         if (window.Hitsumabushi && !isSpectator) {
-          Hitsumabushi.sendGameOver({
-            winnerPlayerId: winnerId,
-            scores: scores,
-            isTie: false
-          });
+          // チーム戦の試合は勝ったチームの teamId、個人戦はプレイヤーの id で報告する
+          Hitsumabushi.sendGameOver(isTeamBattle
+            ? { winnerTeamId: winnerId, scores: scores, isTie: false }
+            : { winnerPlayerId: winnerId, scores: scores, isTie: false });
         }
       }
 
