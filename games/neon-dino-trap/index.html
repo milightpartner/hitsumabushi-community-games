@@ -1168,32 +1168,34 @@
 
     /* ==========================================================================
        ランナー操作（ジャンプ & しゃがみ）
+       isRemote: 相手から届いた動作を反映するだけの時は true。
+       受信した動作を送り返すと2人の間で往復し続けるため、送信しない。
        ========================================================================== */
-    function doJump() {
+    function doJump(isRemote) {
       if (dino.isGrounded && !dino.isDucking) {
         dino.vy = dino.jumpStrength;
         dino.isGrounded = false;
         createParticles(dino.x + dino.width / 2, GROUND_Y, '#00f0ff', 6);
 
-        if (!isSpectator) {
+        if (!isSpectator && !isRemote) {
           Hitsumabushi.sendGameData({ type: 'DINO_ACTION', action: 'JUMP' });
         }
       }
     }
 
-    function startDuck() {
-      if (dino.isGrounded) {
+    function startDuck(isRemote) {
+      if (dino.isGrounded && !dino.isDucking) {
         dino.isDucking = true;
-        if (!isSpectator) {
+        if (!isSpectator && !isRemote) {
           Hitsumabushi.sendGameData({ type: 'DINO_ACTION', action: 'DUCK_START' });
         }
       }
     }
 
-    function stopDuck() {
+    function stopDuck(isRemote) {
       if (dino.isDucking) {
         dino.isDucking = false;
-        if (!isSpectator) {
+        if (!isSpectator && !isRemote) {
           Hitsumabushi.sendGameData({ type: 'DINO_ACTION', action: 'DUCK_END' });
         }
       }
@@ -1270,14 +1272,14 @@
       } else if (data.type === 'DINO_ACTION') {
         // ランナーの動作をトラッパー画面で同期
         if (data.action === 'JUMP') {
-          doJump();
+          doJump(true);
           btnJump.classList.add('active');
           setTimeout(function () { btnJump.classList.remove('active'); }, 180);
         } else if (data.action === 'DUCK_START') {
-          startDuck();
+          startDuck(true);
           btnDuck.classList.add('active');
         } else if (data.action === 'DUCK_END') {
-          stopDuck();
+          stopDuck(true);
           btnDuck.classList.remove('active');
         }
       } else if (data.type === 'DINO_HIT') {
