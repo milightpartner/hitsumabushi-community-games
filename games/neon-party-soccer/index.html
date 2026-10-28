@@ -1451,6 +1451,80 @@
       ctx.fill();
     }
 
+    // 14x14 クラシック・ドット絵ネオンゴースト配列 (1=メインネオン, 2=ハイライト)
+    const GHOST_MASK_1 = [
+      [0,0,0,0,0,1,1,1,1,0,0,0,0,0],
+      [0,0,0,1,1,1,1,1,1,1,1,0,0,0],
+      [0,0,1,1,2,2,1,1,1,1,1,1,0,0],
+      [0,1,1,2,2,1,1,1,1,1,1,1,1,0],
+      [0,1,1,2,1,1,1,1,1,1,1,1,1,0],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,0,1,1,1,0,0,1,1,1,0,1,1],
+      [1,0,0,0,1,1,0,0,1,1,0,0,0,1],
+    ];
+    const GHOST_MASK_2 = [
+      [0,0,0,0,0,1,1,1,1,0,0,0,0,0],
+      [0,0,0,1,1,1,1,1,1,1,1,0,0,0],
+      [0,0,1,1,2,2,1,1,1,1,1,1,0,0],
+      [0,1,1,2,2,1,1,1,1,1,1,1,1,0],
+      [0,1,1,2,1,1,1,1,1,1,1,1,1,0],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [0,1,1,1,0,1,1,1,1,0,1,1,1,0],
+      [0,0,1,0,0,0,1,1,0,0,0,1,0,0],
+    ];
+
+    function drawPixelGhost(x, y, dirX, dirY, mainColor, coreColor, animSec, isStunned, isTrail = false) {
+      ctx.save();
+      ctx.shadowColor = mainColor;
+      ctx.shadowBlur = isTrail ? 8 : 16;
+
+      const mask = Math.floor(animSec * 8) % 2 === 0 ? GHOST_MASK_1 : GHOST_MASK_2;
+      const pix = 2.8;
+      const size = 14 * pix;
+      const sx = x - size / 2;
+      const sy = y - size / 2;
+
+      for (let r = 0; r < 14; r++) {
+        for (let c = 0; c < 14; c++) {
+          const v = mask[r][c];
+          if (!v) continue;
+          ctx.fillStyle = v === 2 && !isTrail ? coreColor : mainColor;
+          ctx.fillRect(Math.round(sx + c * pix), Math.round(sy + r * pix), Math.ceil(pix), Math.ceil(pix));
+        }
+      }
+
+      if (!isTrail) {
+        ctx.shadowBlur = 0;
+        const oxShift = dirX > 0.25 ? 1 : dirX < -0.25 ? -1 : 0;
+        const oyShift = dirY > 0.35 ? 1 : dirY < -0.35 ? -1 : 0;
+        for (const baseCol of [3, 8]) {
+          const ex = sx + (baseCol + oxShift) * pix;
+          const ey = sy + (4 + oyShift) * pix;
+          // 白目 (3x4ドット)
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(Math.round(ex), Math.round(ey), Math.ceil(pix * 3), Math.ceil(pix * 4));
+          // 黒目 (2x2ドット)
+          ctx.fillStyle = isStunned ? '#ff0055' : '#090d1a';
+          const pupilX = ex + (dirX >= 0 ? pix : 0);
+          const pupilY = ey + (dirY > 0.35 ? pix * 1.6 : dirY < -0.35 ? pix * 0.3 : pix);
+          ctx.fillRect(Math.round(pupilX), Math.round(pupilY), Math.ceil(pix * 1.8), Math.ceil(pix * 2));
+        }
+      }
+      ctx.restore();
+    }
+
     function render() {
       ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
@@ -1512,69 +1586,80 @@
       ctx.fillRect(FIELD_RIGHT, GOAL_TOP, GOAL_DEPTH, GOAL_BOTTOM - GOAL_TOP);
       ctx.strokeRect(FIELD_RIGHT, GOAL_TOP, GOAL_DEPTH, GOAL_BOTTOM - GOAL_TOP);
 
-      // 選手描画
+      // 選手描画（J-3: 14x14 ドット絵ネオンゴースト・囲み〇なし）
+      const animSec = (lastTickAt || 0) * 0.001;
       for (const p of players) {
         const isTeamA = p.teamId === 'team_a';
         const mainColor = isTeamA ? '#00f0ff' : '#ff007f';
+        const coreColor = isTeamA ? '#e0ffff' : '#ffe0f5';
+        const isLocal = p.id === localPlayerId && !isSpectator;
+        const speed = Math.hypot(p.vx, p.vy);
+        const bounce = p.stunTimer > 0 ? 0 : Math.abs(Math.sin(animSec * 11)) * (speed > 0.2 ? 2.5 : 1.0);
+        const drawY = p.y - bounce;
 
-        // ドリブル保持中の足元リング
-        if (ball.ownerId === p.id) {
-          ctx.strokeStyle = '#ffe600';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, PLAYER_RADIUS + 9, 0, Math.PI * 2);
-          ctx.stroke();
-        }
+        // 足元の接地シャドウ
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y + PLAYER_RADIUS - 1, 12, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
 
-        // ダッシュオーラ
+        // ダッシュ時のドット絵ネオン残像（囲み〇なし）
         if (p.dashTimer > 0) {
-          ctx.strokeStyle = '#39ff14';
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, PLAYER_RADIUS + 6, 0, Math.PI * 2);
-          ctx.stroke();
+          for (let i = 2; i >= 1; i--) {
+            ctx.save();
+            ctx.globalAlpha = 0.22 * (3 - i);
+            drawPixelGhost(
+              p.x - p.dirX * i * 11,
+              drawY - p.dirY * i * 11,
+              p.dirX,
+              p.dirY,
+              mainColor,
+              coreColor,
+              animSec - i * 0.08,
+              false,
+              true
+            );
+            ctx.restore();
+          }
         }
 
-        // 選手本体
-        ctx.fillStyle = mainColor;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
+        // 選手本体（14x14 ドット絵ネオンゴースト）
+        drawPixelGhost(p.x, drawY, p.dirX, p.dirY, mainColor, coreColor, animSec, p.stunTimer > 0, false);
 
-        // 自機ハイライト
-        if (p.id === localPlayerId && !isSpectator) {
-          ctx.strokeStyle = '#39ff14';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, PLAYER_RADIUS + 2, 0, Math.PI * 2);
-          ctx.stroke();
-        } else {
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        // 向いている方向のノーズマーカー
-        ctx.fillStyle = '#0a0b10';
-        ctx.beginPath();
-        ctx.arc(p.x + p.dirX * 11, p.y + p.dirY * 11, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        // スタン表示
+        // スタン表示 または 自機頭上「▼」ネオンマーカー
         if (p.stunTimer > 0) {
+          ctx.save();
           ctx.fillStyle = '#ffe600';
+          ctx.shadowColor = '#ffe600';
+          ctx.shadowBlur = 8;
           ctx.font = 'bold 13px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText('★💫★', p.x, p.y - PLAYER_RADIUS - 10);
+          ctx.restore();
+        } else if (isLocal) {
+          ctx.save();
+          ctx.fillStyle = '#39ff14';
+          ctx.shadowColor = '#39ff14';
+          ctx.shadowBlur = 8;
+          const markerY = p.y - PLAYER_RADIUS - 11 + Math.sin(animSec * 6) * 2;
+          ctx.beginPath();
+          ctx.moveTo(p.x, markerY + 6);
+          ctx.lineTo(p.x - 5, markerY);
+          ctx.lineTo(p.x + 5, markerY);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
         }
 
-        // プレイヤー名
-        ctx.fillStyle = '#e2e8f0';
-        ctx.font = 'bold 12px sans-serif';
+        // プレイヤー名（ネオン発光ラベル）
+        ctx.save();
+        ctx.shadowColor = mainColor;
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = isLocal ? '#39ff14' : coreColor;
+        ctx.font = 'bold 12px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(p.name, p.x, p.y + PLAYER_RADIUS + 16);
+        ctx.restore();
       }
 
       // シュート軌跡エフェクト
