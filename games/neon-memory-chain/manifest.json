@@ -1,0 +1,17 @@
+{
+  "$schema": "https://milightpartner.jp/schemas/game-manifest-1.json",
+  "gameId": "neon-memory-chain",
+  "title": "ネオン・メモリーチェーン",
+  "version": "1.0.0",
+  "players": {
+    "min": 2,
+    "max": 4,
+    "type": "variable",
+    "allowCpuFill": false
+  },
+  "creator": "milightpartner",
+  "resultModel": {
+    "type": "ranked",
+    "allowTie": false
+  }
+}

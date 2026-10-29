@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ネオン・メモリーチェーン</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      background-color: #0a0b10;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 8px;
+      transition: background-color 0.3s;
+    }
+
+    body.transparent { background-color: transparent !important; }
+    :root:has(body.transparent) { background-color: transparent !important; }
+
+    #app {
+      width: 100%;
+      max-width: 820px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .card {
+      background: rgba(22, 26, 42, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    }
+
+    /* 上部HUD */
+    .hud {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 6px 4px 14px;
+      min-height: 52px;
+    }
+    .hud-title { color: #00f0ff; font-weight: bold; font-size: 0.95rem; letter-spacing: 1px; }
+    .spectator-badge {
+      display: none;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.12);
+      border: 1px solid #ffe600;
+      color: #ffe600;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    .mute-btn {
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      background: rgba(0, 240, 255, 0.08);
+      color: #fff;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    /* 中央: 手番の順番 + ステージ */
+    .main {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      gap: 8px;
+    }
+
+    .roster {
+      flex-shrink: 0;
+      width: 180px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow: hidden;
+    }
+    .roster-head { color: #94a3b8; font-size: 0.75rem; letter-spacing: 1px; }
+    .roster-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 0.9rem;
+      min-width: 0;
+    }
+    .roster-item .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .roster-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .roster-item .tag { font-size: 0.7rem; padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
+    .roster-item.current { border-color: #00f0ff; background: rgba(0, 240, 255, 0.12); box-shadow: 0 0 10px rgba(0, 240, 255, 0.35); }
+    .roster-item.current .tag { background: #00f0ff; color: #0a0b10; font-weight: bold; }
+    .roster-item.next .tag { border: 1px solid #ff007f; color: #ff007f; }
+    .roster-item.out { opacity: 0.4; }
+    .roster-item.out .name { text-decoration: line-through; }
+    .roster-item.out .tag { color: #94a3b8; }
+    .roster-item.winner { border-color: #ffe600; background: rgba(255, 230, 0, 0.12); }
+    .roster-item.winner .tag { background: #ffe600; color: #0a0b10; font-weight: bold; }
+
+    .stage {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      overflow: hidden;
+    }
+    .status { font-size: 1.15rem; font-weight: bold; text-align: center; min-height: 1.5em; }
+    .status.mine { color: #00f0ff; text-shadow: 0 0 10px rgba(0, 240, 255, 0.6); }
+    .status.bad { color: #ff3b5c; }
+    .status.win { color: #ffe600; }
+
+    .flash {
+      font-size: clamp(2.5rem, 12vmin, 5rem);
+      line-height: 1;
+      height: 1.1em;
+      opacity: 0;
+    }
+    .flash.on { animation: flash-pop 0.45s ease-out; }
+    @keyframes flash-pop {
+      0% { opacity: 1; transform: scale(1.25); }
+      100% { opacity: 0; transform: scale(1); }
+    }
+
+    .chain-label { color: #94a3b8; font-size: 0.8rem; }
+    .chain-label b { color: #fff; font-size: 1rem; }
+    /* 1行は8個まで（ポータルが保証する最小幅 308px に収まる数）。枠は画面幅に合わせて縮める */
+    .chain {
+      --cell: clamp(24px, 8.5vw, 34px);
+      display: grid;
+      grid-template-columns: repeat(var(--cols), var(--cell));
+      justify-content: center;
+      gap: 4px;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .cell {
+      width: var(--cell);
+      height: var(--cell);
+      border-radius: 6px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: calc(var(--cell) * 0.55);
+      font-weight: bold;
+      color: #94a3b8;
+    }
+    .cell.add { border-style: dashed; border-color: #ff007f; color: #ff007f; }
+    .cell.now { border-color: #fff; box-shadow: 0 0 8px rgba(255, 255, 255, 0.7); }
+    .cell.done { color: #0a0b10; border-color: transparent; }
+    .cell.miss { background: #ff3b5c; color: #fff; border-color: transparent; }
+
+    .beat {
+      width: min(260px, 80%);
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(148, 163, 184, 0.2);
+      overflow: hidden;
+    }
+    .beat-fill { height: 100%; width: 0; background: #39ff14; }
+    .beat-fill.low { background: #ff3b5c; }
+
+    /* 十字キー */
+    .pad {
+      flex-shrink: 0;
+      align-self: center;
+      display: grid;
+      grid-template-columns: repeat(3, var(--key));
+      grid-auto-rows: var(--key);
+      gap: 6px;
+      --key: clamp(56px, 17vmin, 84px);
+      padding-bottom: 4px;
+      transition: opacity 0.2s;
+    }
+    .pad.locked { opacity: 0.35; }
+    .key {
+      border-radius: 14px;
+      border: 2px solid var(--c);
+      background: rgba(22, 26, 42, 0.85);
+      color: var(--c);
+      font-size: calc(var(--key) * 0.45);
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 0 10px color-mix(in srgb, var(--c) 35%, transparent);
+    }
+    .pad.locked .key { cursor: default; }
+    .key.lit { background: var(--c); color: #0a0b10; box-shadow: 0 0 24px var(--c); }
+    .key[data-dir="0"] { grid-column: 2; grid-row: 1; }
+    .key[data-dir="1"] { grid-column: 3; grid-row: 2; }
+    .key[data-dir="2"] { grid-column: 2; grid-row: 3; }
+    .key[data-dir="3"] { grid-column: 1; grid-row: 2; }
+    .pad-center { grid-column: 2; grid-row: 2; }
+
+    /* 狭い画面では手番の順番を上に横並びにする */
+    @media (max-width: 640px) {
+      .main { flex-direction: column; }
+      .roster { width: auto; flex-direction: row; flex-wrap: wrap; padding: 6px; gap: 4px; }
+      .roster-head { display: none; }
+      .roster-item { flex: 1 1 40%; padding: 4px 6px; font-size: 0.8rem; }
+      .hud-title { font-size: 0.85rem; }
+    }
+    @media (max-height: 560px) {
+      .pad { --key: clamp(48px, 13vmin, 64px); gap: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="hud card">
+      <div class="hud-title">MEMORY CHAIN</div>
+      <span class="spectator-badge">👀 観戦中</span>
+      <button class="mute-btn" id="muteBtn" aria-label="音のオン・オフ">🔊</button>
+    </div>
+
+    <div class="main">
+      <div class="roster card" id="roster"></div>
+      <div class="stage card">
+        <div class="status" id="status">接続中...</div>
+        <div class="flash" id="flash"></div>
+        <div class="chain-label" id="chainLabel"></div>
+        <div class="chain" id="chain"></div>
+        <div class="beat"><div class="beat-fill" id="beatFill"></div></div>
+      </div>
+    </div>
+
+    <div class="pad locked" id="pad">
+      <button class="key" data-dir="0" style="--c:#00f0ff" aria-label="上">▲</button>
+      <button class="key" data-dir="1" style="--c:#ff007f" aria-label="右">▶</button>
+      <button class="key" data-dir="2" style="--c:#ffe600" aria-label="下">▼</button>
+      <button class="key" data-dir="3" style="--c:#39ff14" aria-label="左">◀</button>
+      <div class="pad-center"></div>
+    </div>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/0.26.4/hitsumabushi-sdk.js"></script>
+  <script>
+    // 方向は 0:上 1:右 2:下 3:左
+    var ARROWS = ['▲', '▶', '▼', '◀'];
+    var COLORS = ['#00f0ff', '#ff007f', '#ffe600', '#39ff14'];
+    var TONES = [523, 659, 784, 1047];
+    var KEY_DIRS = {
+      ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3,
+      w: 0, d: 1, s: 2, a: 3, W: 0, D: 1, S: 2, A: 3
+    };
+
+    var INTRO_MS = 2600;      // 試合開始から最初の手番まで
+    var SEED_SHOW_MS = 1000;  // 最初の1つを光らせる時刻（試合開始から）
+    var GAP_MS = 1200;        // 手番と手番の間
+    // 進行役以外の手番で入力も時間切れの報告も来ないときに、進行役が時間切れとして扱うまでの猶予。
+    // 手番のプレイヤーが落ちたまま試合が止まるのを防ぐ。遅延で本人の入力と食い違わないよう長めに取る。
+    var STALL_GRACE_MS = 4000;
+
+    var INPUT_LIMIT_MS = 2000; // 1つ押すまでの制限時間。押すたびに測り直し、何周しても変えない
+
+    var config = null;
+    var myId = null;
+    var order = [];     // 手番の順番（プレイヤーID）
+    var players = {};   // id -> { name, color }
+
+    // 試合の状態。全クライアントが同じ入力を同じ順で適用して同じ状態になる。
+    var seq;            // これまでに積み上がった方向の列
+    var eliminated;     // 脱落した順のプレイヤーID
+    var turnNo;         // 何番目の手番か（0始まり）
+    var cur;            // 手番のプレイヤーの order 上の位置
+    var pos;            // この手番で入力した数
+    var inputs;         // この手番で入力した方向
+    var winner;
+
+    // このクライアントの時計で見た進行
+    var startedAt;      // 試合開始
+    var readyAt;        // この手番の入力受付開始
+    var lastTurn;       // 直前の手番の結果（手番の間に表示する）
+    var lastAt;         // 次の入力の制限時間を測り始めた時刻（手番の開始か直前の入力）
+    var seedShown;      // 最初の1つを光らせたか
+    var ticker = null;
+
+    // ---------- 音 ----------
+    var audio = null;
+    var muted = false;
+    function unlockAudio() {
+      if (audio) return;
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audio = new Ctx();
+      if (audio.state === 'suspended') audio.resume();
+    }
+    function beep(freq, ms, type, gain) {
+      if (!audio || muted) return;
+      var osc = audio.createOscillator();
+      var g = audio.createGain();
+      osc.type = type || 'square';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(gain || 0.08, audio.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + ms / 1000);
+      osc.connect(g);
+      g.connect(audio.destination);
+      osc.start();
+      osc.stop(audio.currentTime + ms / 1000);
+    }
+
+    // ---------- 進行 ----------
+    function hashSeed(text) {
+      var h = 0;
+      for (var i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+      return Math.abs(h) % 4;
+    }
+
+    function aliveIds() {
+      return order.filter(function (id) { return eliminated.indexOf(id) === -1; });
+    }
+    function currentId() { return order[cur]; }
+    function nextAliveIndex(from) {
+      for (var k = 1; k <= order.length; k++) {
+        var idx = (from + k) % order.length;
+        if (eliminated.indexOf(order[idx]) === -1) return idx;
+      }
+      return from;
+    }
+    function deadline() { return lastAt + INPUT_LIMIT_MS; }
+    function isMyTurn() {
+      return myId !== null && winner === null && currentId() === myId && !Hitsumabushi.isSpectator();
+    }
+
+    function resetMatch() {
+      seq = [hashSeed(String(config.seriesId) + ':' + config.matchNumber)];
+      eliminated = [];
+      turnNo = 0;
+      cur = 0;
+      pos = 0;
+      inputs = [];
+      winner = null;
+      startedAt = Date.now();
+      readyAt = startedAt + INTRO_MS;
+      lastAt = readyAt;
+      lastTurn = null;
+      seedShown = false;
+    }
+
+    function publishState() {
+      if (!Hitsumabushi.isGameMaster()) return;
+      Hitsumabushi.setMatchState({
+        seq: seq, eliminated: eliminated, turnNo: turnNo, cur: cur,
+        pos: pos, inputs: inputs, winner: winner
+      });
+    }
+
+    // 手番のプレイヤーの入力を適用する。自分の入力も相手から届いた入力もここを通る。
+    function applyInput(n, i, dir) {
+      if (n !== turnNo || i !== pos || winner !== null) return;
+      lastTurn = null;
+      inputs.push(dir);
+      showFlash(dir);
+      beep(TONES[dir], 180);
+      if (pos < seq.length && dir !== seq[pos]) {
+        eliminate('miss');
+      } else if (pos < seq.length) {
+        pos++;
+        lastAt = Date.now();
+      } else {
+        seq.push(dir);
+        endTurn(null);
+      }
+      publishState();
+      render();
+    }
+
+    function applyTimeout(n, i) {
+      if (n !== turnNo || i !== pos || winner !== null) return;
+      lastTurn = null;
+      eliminate('time');
+      publishState();
+      render();
+    }
+
+    function eliminate(reason) {
+      eliminated.push(currentId());
+      beep(110, 400, 'sawtooth', 0.1);
+      var alive = aliveIds();
+      if (alive.length === 1) {
+        winner = alive[0];
+        lastTurn = { id: currentId(), len: seq.length, inputs: inputs, fail: reason };
+        render();
+        if (Hitsumabushi.isGameMaster()) {
+          // 決着の通知（MATCH_OVER）が、最後の入力より先に届くクライアントがある。
+          // 決着後の受信は捨てるので、結果を同じ送信元から先に送っておく（同じ送信元の順序は保たれる）。
+          Hitsumabushi.sendGameData({ type: 'RESULT', winner: winner, eliminated: eliminated, lastTurn: lastTurn });
+          Hitsumabushi.sendGameOver({
+            winnerPlayerId: winner,
+            rankings: [winner].concat(eliminated.slice().reverse())
+          });
+        }
+        return;
+      }
+      endTurn(reason);
+    }
+
+    // 失敗した手番は列が伸びていないが、成功した手番は最後の1つが追加の枠に入っている
+    function endTurn(fail) {
+      lastTurn = { id: currentId(), len: fail ? seq.length : seq.length - 1, inputs: inputs, fail: fail };
+      var next = nextAliveIndex(cur);
+      cur = next;
+      turnNo++;
+      pos = 0;
+      inputs = [];
+      readyAt = Date.now() + GAP_MS;
+      lastAt = readyAt;
+    }
+
+    // ---------- 入力 ----------
+    function press(dir) {
+      unlockAudio();
+      if (Hitsumabushi.phase === 'over' || !isMyTurn() || Date.now() < readyAt) return;
+      var n = turnNo, i = pos;
+      Hitsumabushi.sendGameData({ type: 'INPUT', turnNo: n, index: i, dir: dir });
+      applyInput(n, i, dir);
+    }
+
+    function tick() {
+      if (Hitsumabushi.phase === 'over' || !config) return;
+      var now = Date.now();
+      if (winner === null && now >= readyAt) {
+        var late = now - deadline();
+        if (isMyTurn() && late >= 0) {
+          var n = turnNo, i = pos;
+          Hitsumabushi.sendGameData({ type: 'TIMEOUT', turnNo: n, index: i });
+          applyTimeout(n, i);
+        } else if (Hitsumabushi.isGameMaster() && currentId() !== myId && late >= STALL_GRACE_MS) {
+          var sn = turnNo, si = pos;
+          Hitsumabushi.sendGameData({ type: 'TIMEOUT', turnNo: sn, index: si });
+          applyTimeout(sn, si);
+        }
+      }
+      if (!seedShown && turnNo === 0 && now >= startedAt + SEED_SHOW_MS) {
+        seedShown = true;
+        showFlash(seq[0]);
+        beep(TONES[seq[0]], 260);
+      }
+      render();
+    }
+
+    // ---------- 描画 ----------
+    var flashEl, statusEl, chainEl, chainLabelEl, beatFillEl, rosterEl, padEl;
+
+    function showFlash(dir) {
+      flashEl.textContent = ARROWS[dir];
+      flashEl.style.color = COLORS[dir];
+      flashEl.classList.remove('on');
+      void flashEl.offsetWidth;
+      flashEl.classList.add('on');
+      var key = padEl.querySelector('.key[data-dir="' + dir + '"]');
+      key.classList.add('lit');
+      setTimeout(function () { key.classList.remove('lit'); }, 160);
+    }
+
+    function nameOf(id) {
+      if (id === myId) return 'あなた';
+      return players[id] ? players[id].name : id;
+    }
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = 'status' + (kind ? ' ' + kind : '');
+    }
+
+    // len 個の枠と（withAdd なら）追加の1枠。入力した分だけ矢印を見せる。
+    function renderChain(len, shown, fail, active, withAdd) {
+      var html = '';
+      for (var i = 0; i < len + (withAdd ? 1 : 0); i++) {
+        var isAdd = i === len;
+        var cls = 'cell' + (isAdd ? ' add' : '');
+        var text = isAdd ? '+' : '•';
+        var style = '';
+        if (i < shown.length) {
+          var dir = shown[i];
+          var missed = fail === 'miss' && i === shown.length - 1;
+          cls += missed ? ' miss' : ' done';
+          text = ARROWS[dir];
+          if (!missed) style = ' style="background:' + COLORS[dir] + '"';
+        } else if (active && i === shown.length) {
+          cls += ' now';
+        }
+        html += '<div class="' + cls + '"' + style + '>' + text + '</div>';
+      }
+      chainEl.innerHTML = html;
+      chainEl.style.setProperty('--cols', Math.min(8, chainEl.children.length));
+    }
+
+    function renderRoster() {
+      var nextIdx = winner === null ? nextAliveIndex(cur) : -1;
+      var html = '<div class="roster-head">手番の順番</div>';
+      order.forEach(function (id, idx) {
+        var out = eliminated.indexOf(id);
+        var cls = 'roster-item';
+        var tag = '';
+        if (id === winner) { cls += ' winner'; tag = '1位'; }
+        else if (out !== -1) { cls += ' out'; tag = '脱落 ' + (order.length - out) + '位'; }
+        else if (idx === cur) { cls += ' current'; tag = '今'; }
+        else if (idx === nextIdx) { cls += ' next'; tag = '次'; }
+        html += '<div class="' + cls + '" data-player="' + id + '">'
+          + '<span class="dot" style="background:' + players[id].color + '"></span>'
+          + '<span class="name"></span>'
+          + (tag ? '<span class="tag">' + tag + '</span>' : '')
+          + '</div>';
+      });
+      rosterEl.innerHTML = html;
+      // 名前はプレイヤーが付けた文字列なので textContent で入れる
+      order.forEach(function (id) {
+        rosterEl.querySelector('[data-player="' + id + '"] .name').textContent = nameOf(id);
+      });
+    }
+
+    function render() {
+      if (Hitsumabushi.phase === 'over' || !config) return;
+      var now = Date.now();
+      renderRoster();
+
+      if (winner !== null) {
+        setStatus('🏆 ' + nameOf(winner) + (winner === myId ? 'の勝ち！' : ' の勝ち！'), 'win');
+        // 途中参加で決着後の状態を受け取ったときは直前の手番が分からない
+        if (lastTurn) renderChain(lastTurn.len, lastTurn.inputs, lastTurn.fail, false, true);
+        else renderChain(seq.length, [], null, false, false);
+        chainLabelEl.innerHTML = 'チェーン <b>' + seq.length + '</b>';
+        beatFillEl.style.width = '0%';
+        padEl.classList.add('locked');
+        return;
+      }
+
+      var mine = isMyTurn();
+      var who = nameOf(currentId());
+      padEl.classList.toggle('locked', !(mine && now >= readyAt));
+
+      if (now < readyAt) {
+        beatFillEl.style.width = '0%';
+        beatFillEl.classList.remove('low');
+        if (turnNo === 0) {
+          // 開始直後: 最初の1つを見せる
+          renderChain(1, seedShown ? [seq[0]] : [], null, false, false);
+          chainLabelEl.innerHTML = '最初の1つ';
+          setStatus(mine ? '最初の1つを覚えて！' : 'まもなく開始', mine ? 'mine' : '');
+          return;
+        }
+        if (lastTurn) {
+          renderChain(lastTurn.len, lastTurn.inputs, lastTurn.fail, false, true);
+          chainLabelEl.innerHTML = 'チェーン <b>' + seq.length + '</b>';
+          var prev = nameOf(lastTurn.id);
+          if (lastTurn.fail === 'miss') setStatus(prev + ' ミス！ 脱落', 'bad');
+          else if (lastTurn.fail === 'time') setStatus(prev + ' 時間切れ！ 脱落', 'bad');
+          else setStatus(mine ? '次はあなたの番！' : '次は ' + who + ' の番', mine ? 'mine' : '');
+          return;
+        }
+      }
+
+      renderChain(seq.length, inputs, null, true, true);
+      chainLabelEl.innerHTML = 'チェーン <b>' + seq.length + '</b>';
+      if (pos < seq.length) setStatus(mine ? 'あなたの番！' : who + ' の番', mine ? 'mine' : '');
+      else setStatus(mine ? '1つ追加して！' : who + ' が追加します', mine ? 'mine' : '');
+
+      var left = Math.max(0, Math.min(1, (deadline() - now) / INPUT_LIMIT_MS));
+      beatFillEl.style.width = (left * 100) + '%';
+      beatFillEl.classList.toggle('low', left < 0.35);
+    }
+
+    function applyObsMode(isObs) {
+      document.body.classList.toggle('transparent', isObs);
+    }
+
+    Hitsumabushi.init({
+      onCreateMatch: function () {
+        flashEl = document.getElementById('flash');
+        statusEl = document.getElementById('status');
+        chainEl = document.getElementById('chain');
+        chainLabelEl = document.getElementById('chainLabel');
+        beatFillEl = document.getElementById('beatFill');
+        rosterEl = document.getElementById('roster');
+        padEl = document.getElementById('pad');
+
+        padEl.querySelectorAll('.key').forEach(function (key) {
+          key.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            press(Number(key.getAttribute('data-dir')));
+          });
+        });
+        document.addEventListener('keydown', function (e) {
+          var dir = KEY_DIRS[e.key];
+          if (dir === undefined) return;
+          e.preventDefault();
+          if (e.repeat) return;
+          press(dir);
+        });
+        document.addEventListener('pointerdown', unlockAudio);
+        var muteBtn = document.getElementById('muteBtn');
+        muteBtn.addEventListener('click', function () {
+          unlockAudio();
+          muted = !muted;
+          muteBtn.textContent = muted ? '🔇' : '🔊';
+        });
+      },
+
+      onStartMatch: function (cfg) {
+        config = cfg;
+        myId = cfg.localPlayerId;
+        document.body.classList.toggle('spectating', Hitsumabushi.isSpectator());
+        applyObsMode(cfg.isObsMode);
+
+        players = {};
+        cfg.players.forEach(function (p) { players[p.id] = { name: p.name, color: p.color }; });
+        // 連戦では先頭を1人ずつずらす（序盤ほど列が短く有利なため）
+        var ids = cfg.players.map(function (p) { return p.id; });
+        var shift = (cfg.matchNumber - 1) % ids.length;
+        order = ids.slice(shift).concat(ids.slice(0, shift));
+
+        resetMatch();
+        flashEl.classList.remove('on');
+        flashEl.textContent = '';
+        flashEl.removeAttribute('style');
+        padEl.querySelectorAll('.key').forEach(function (key) { key.classList.remove('lit'); });
+        if (ticker) clearInterval(ticker);
+        ticker = setInterval(tick, 50);
+        // 開始時の状態は試合番号から決まるので登録しない（最初の入力から登録する）
+        render();
+      },
+
+      onMatchState: function (state) {
+        seq = state.seq;
+        eliminated = state.eliminated;
+        turnNo = state.turnNo;
+        cur = state.cur;
+        pos = state.pos;
+        inputs = state.inputs;
+        winner = state.winner;
+        lastTurn = null;
+        seedShown = true;
+        // 途中から入ったので、今の入力の制限時間を今から測る
+        readyAt = Date.now();
+        lastAt = readyAt;
+        render();
+      },
+
+      onObsModeChange: applyObsMode,
+
+      onGameData: function (payload, senderId) {
+        if (Hitsumabushi.phase === 'over' || !payload) return;
+        // 手番のプレイヤー本人の送信だけを受け付ける。時間切れだけは、手番のプレイヤーが
+        // 落ちたときのために進行役からも受け付ける。
+        var fromCurrent = senderId === currentId();
+        if (payload.type === 'INPUT' && fromCurrent) {
+          applyInput(payload.turnNo, payload.index, payload.dir);
+        } else if (payload.type === 'TIMEOUT' && (fromCurrent || senderId === config.gameMasterId)) {
+          applyTimeout(payload.turnNo, payload.index);
+        } else if (payload.type === 'RESULT' && senderId === config.gameMasterId && winner === null) {
+          winner = payload.winner;
+          eliminated = payload.eliminated;
+          lastTurn = payload.lastTurn;
+          render();
+        }
+      },
+
+      onError: function (code, detail) {
+        console.error('[neon-memory-chain]', code, detail && detail.message);
+      }
+    });
+  </script>
+</body>
+</html>
