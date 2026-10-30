@@ -543,16 +543,24 @@
         team_d: '#39ff14'
       };
 
-      // チームは teamId ごとにまとめ、名前は teamId をそのまま見せる。2チームでも
+      // チームの名前はポータルと同じにする（API リファレンス §3）
+      var TEAM_NAMES = {
+        team_a: 'チームA',
+        team_b: 'チームB',
+        team_c: 'チームC',
+        team_d: 'チームD'
+      };
+
+      // チームは teamId ごとにまとめる。2チームでも
       // team_a / team_b とは限らない（ペアの大会では team_c 対 team_d なども来る）。
-      // 公式に無い ID が来たら、最初のプレイヤーの色をそのまま見せる
+      // 公式に無い ID が来たら、teamId と最初のプレイヤーの色をそのまま見せる
       function groupTeams() {
         var teams = {};
         playersList.forEach(function (p) {
           if (!teams[p.teamId]) {
             teams[p.teamId] = {
               id: p.teamId,
-              name: p.teamId,
+              name: TEAM_NAMES[p.teamId] || p.teamId,
               color: TEAM_COLORS[p.teamId] || p.color,
               score: 0,
               members: []
