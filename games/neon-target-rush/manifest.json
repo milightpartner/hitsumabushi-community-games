@@ -1,7 +1,7 @@
 {
   "gameId": "neon-target-rush",
   "title": "ネオン・ターゲットラッシュ",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "players": {
     "min": 2,
     "max": 4,
