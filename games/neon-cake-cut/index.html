@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ネオン・ケーキカット</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      background-color: #0a0b10;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 8px;
+      transition: background-color 0.3s;
+    }
+
+    body.transparent { background-color: transparent !important; }
+    :root:has(body.transparent) { background-color: transparent !important; }
+
+    #app {
+      width: 100%;
+      max-width: 820px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .card {
+      background: rgba(22, 26, 42, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    }
+
+    /* 上部HUD: タイトル・お題・残り時間 */
+    .hud {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px 4px 12px;
+      min-height: 52px;
+    }
+    .hud-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .hud-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .hud-title { color: #00f0ff; font-weight: bold; font-size: 0.75rem; letter-spacing: 1px; white-space: nowrap; }
+    .prompt {
+      flex: 1;
+      min-width: 0;
+      font-weight: bold;
+      font-size: 1rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .prompt b { color: #ffe600; font-size: 1.2em; }
+    .timer { display: flex; align-items: center; gap: 8px; }
+    .timer-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(148, 163, 184, 0.2); overflow: hidden; }
+    .timer-fill { height: 100%; width: 100%; background: #39ff14; }
+    .timer-fill.low { background: #ff3b5c; }
+    .timer-text { font-size: 0.75rem; color: #94a3b8; min-width: 4.5em; text-align: right; white-space: nowrap; }
+    .spectator-badge {
+      display: none;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.12);
+      border: 1px solid #ffe600;
+      color: #ffe600;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    .mute-btn {
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      background: rgba(0, 240, 255, 0.08);
+      color: #fff;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    /* 参加者 */
+    .roster { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      flex: 1 1 22%;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(22, 26, 42, 0.85);
+      font-size: 0.8rem;
+    }
+    .chip .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .chip .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip .state { font-size: 0.7rem; color: #94a3b8; white-space: nowrap; }
+    .chip.done { border-color: #39ff14; }
+    .chip.done .state { color: #39ff14; font-weight: bold; }
+    .chip.focus { border-color: #ffe600; box-shadow: 0 0 10px rgba(255, 230, 0, 0.45); }
+    .chip.winner { border-color: #ffe600; background: rgba(255, 230, 0, 0.12); }
+    .chip.winner .state { color: #ffe600; font-weight: bold; }
+
+    /* ケーキ */
+    .stage {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #cake {
+      display: block;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    body.spectating .stage { pointer-events: none; }
+    .banner {
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 94%;
+      padding: 4px 14px;
+      border-radius: 999px;
+      background: rgba(10, 11, 16, 0.8);
+      border: 1px solid rgba(0, 240, 255, 0.5);
+      font-weight: bold;
+      font-size: 0.95rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+    .banner:empty { display: none; }
+    .count {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(3rem, 18vmin, 7rem);
+      font-weight: bold;
+      color: #ffe600;
+      text-shadow: 0 0 24px rgba(255, 230, 0, 0.8), 0 0 4px #0a0b10;
+      pointer-events: none;
+    }
+    .count:empty { display: none; }
+    .stamp {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%) rotate(-4deg);
+      max-width: 94%;
+      padding: 6px 16px;
+      border-radius: 10px;
+      border: 2px solid #ff007f;
+      background: rgba(10, 11, 16, 0.85);
+      color: #ff007f;
+      text-align: center;
+      text-shadow: 0 0 10px rgba(255, 0, 127, 0.7);
+      pointer-events: none;
+      animation: stamp-in 0.35s ease-out;
+    }
+    .stamp:empty { display: none; }
+    .stamp .title { display: block; font-size: 1.35rem; font-weight: bold; letter-spacing: 2px; }
+    .stamp .sub { display: block; font-size: 0.8rem; color: #fff; text-shadow: none; }
+    .stamp.good { border-color: #ffe600; color: #ffe600; text-shadow: 0 0 10px rgba(255, 230, 0, 0.7); }
+    @keyframes stamp-in {
+      0% { opacity: 0; transform: translateX(-50%) rotate(-4deg) scale(1.8); }
+      100% { opacity: 1; transform: translateX(-50%) rotate(-4deg) scale(1); }
+    }
+
+    /* 操作 */
+    .controls {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px;
+    }
+    .info { flex: 1; min-width: 0; font-size: 0.8rem; color: #94a3b8; padding-left: 6px; }
+    .info b { color: #fff; }
+    .btn {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 8px 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 240, 255, 0.5);
+      background: rgba(0, 240, 255, 0.08);
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.35; cursor: default; }
+    .btn.ok { border-color: #39ff14; background: rgba(57, 255, 20, 0.15); color: #39ff14; min-width: 72px; }
+    .controls.hidden { display: none; }
+
+    /* 最終結果 */
+    .ranking { flex-shrink: 0; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+    .ranking.hidden { display: none; }
+    .rank-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; min-width: 0; }
+    .rank-row .pos { width: 2.4em; color: #94a3b8; font-weight: bold; flex-shrink: 0; }
+    .rank-row .name { flex: 1; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-row .title { color: #ff007f; font-weight: bold; white-space: nowrap; }
+    .rank-row .detail { color: #94a3b8; font-size: 0.75rem; white-space: nowrap; }
+    .rank-row.first .pos, .rank-row.first .title { color: #ffe600; }
+
+    @media (max-width: 640px), (max-height: 560px) {
+      .btn .btn-label { display: none; }
+      .btn { padding: 8px; }
+      /* 狭い画面ではお題（何等分か）を削らないよう、ロゴを外す */
+      .hud-title { display: none; }
+      .prompt { font-size: 0.9rem; }
+      .chip { flex-basis: 40%; padding: 3px 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="hud card">
+      <div class="hud-main">
+        <div class="hud-row">
+          <span class="hud-title">CAKE CUT</span>
+          <span class="prompt" id="prompt">接続中...</span>
+          <span class="spectator-badge">👀 観戦中</span>
+        </div>
+        <div class="timer">
+          <div class="timer-bar"><div class="timer-fill" id="timerFill"></div></div>
+          <span class="timer-text" id="timerText"></span>
+        </div>
+      </div>
+      <button class="mute-btn" id="muteBtn" aria-label="音のオン・オフ">🔊</button>
+    </div>
+
+    <div class="roster" id="roster"></div>
+
+    <div class="stage card" id="stage">
+      <canvas id="cake" width="0" height="0"></canvas>
+      <div class="banner" id="banner"></div>
+      <div class="count" id="count"></div>
+      <div class="stamp" id="stamp"></div>
+    </div>
+
+    <div class="controls card" id="controls">
+      <div class="info" id="info"></div>
+      <button class="btn" id="undoBtn" title="1本戻す" aria-label="1本戻す"><span>↶</span><span class="btn-label">1本戻す</span></button>
+      <button class="btn" id="clearBtn" title="クリア" aria-label="クリア"><span>✕</span><span class="btn-label">クリア</span></button>
+      <button class="btn ok" id="okBtn">OK</button>
+    </div>
+
+    <div class="ranking card hidden" id="ranking"></div>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/0.28.0/hitsumabushi-sdk.js"></script>
+  <script>
+    // ---------- ルール ----------
+    var INTRO_MS = 3000;        // お題を見せてから切り始めるまで
+    var PLAY_MS = 20000;        // 切っていられる時間
+    // 進行役が、届かない提出を待つ猶予。各自が自分の時計で時間切れを送るので、遅延の分だけ待つ。
+    // 落ちたプレイヤーがいても試合が止まらないよう、これを過ぎたら未提出として結果を出す。
+    var GRACE_MS = 5000;
+    var STEP_MS = 3600;         // 答え合わせで1人に使う時間
+    var FINAL_MS = 1200;        // 最後の1人の答え合わせから結果を報告するまで
+
+    var CRUMB_PCT = 1;          // これより小さい切れ端は1切れに数えない（くず）
+
+    // ケーキは 1000×1000 の論理座標の中に置く。面積は GRID×GRID のマスで数える。
+    var SIZE = 1000;
+    var GRID = 400;
+    var CELL = SIZE / GRID;
+    var EXTEND = 40;            // 切り口の端を伸ばす最大の長さ（縁や別の切り口まであと少しで止めた線をつなぐ）
+    var MAX_POINTS = 80;        // 1本の線を送るときの最大の点の数
+
+    var SHAPES = [
+      { name: '丸い', sides: 0, r: 400 },
+      { name: '三角の', sides: 3, r: 490 },
+      { name: '四角い', sides: 4, r: 440 },
+      { name: '五角形の', sides: 5, r: 430 },
+      { name: '六角形の', sides: 6, r: 420 }
+    ];
+    var PIECE_COLORS = ['#00f0ff', '#ff007f', '#ffe600', '#39ff14', '#a855f7', '#ff8a00'];
+
+    // ---------- 試合の状態 ----------
+    var config = null;
+    var myId = null;
+    var isPlayer = false;
+    var order = [];             // 参加者のID（席の順）
+    var players = {};           // id -> { name, color }
+
+    var cake;                   // { shape, n, rot, verts, inside }
+    var startedAt, playAt, deadline;
+    var strokes;                // 自分の切り口（確定したもの）
+    var drawing;                // 今なぞっている線（論理座標の点の配列）
+    var live;                   // 自分の切り口から数えた今のピース
+    var submissions;            // id -> { strokes, ms, missing }
+    var reveal;                 // 答え合わせ { results, ranking }
+    var revealAt;               // 答え合わせを始めた時刻（このクライアントの時計）
+    var revealEval;             // id -> 自分で数え直した切り分け（色塗り用）
+    var overSent;
+    var lastBeepSec;
+    var lastStampStep;
+    var ticker = null;
+
+    // ---------- 乱数（全員が同じお題になるよう、連戦IDと試合番号から作る） ----------
+    function makeRng(text) {
+      var h = 2166136261;
+      for (var i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return function () {
+        h = (h + 0x6D2B79F5) | 0;
+        var t = Math.imul(h ^ (h >>> 15), 1 | h);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function makeCake(seedText) {
+      var rng = makeRng(seedText);
+      var shape = SHAPES[Math.floor(rng() * SHAPES.length)];
+      var n = 2 + Math.floor(rng() * 5);
+      var rot = rng() * Math.PI * 2;
+      var verts = [];
+      for (var k = 0; k < shape.sides; k++) {
+        var a = rot + (k * Math.PI * 2) / shape.sides - Math.PI / 2;
+        verts.push([SIZE / 2 + shape.r * Math.cos(a), SIZE / 2 + shape.r * Math.sin(a)]);
+      }
+      var inside = new Uint8Array(GRID * GRID);
+      for (var gy = 0; gy < GRID; gy++) {
+        for (var gx = 0; gx < GRID; gx++) {
+          inside[gy * GRID + gx] = isInsideCake(shape, verts, (gx + 0.5) * CELL, (gy + 0.5) * CELL) ? 1 : 0;
+        }
+      }
+      return { shape: shape, n: n, rot: rot, verts: verts, inside: inside };
+    }
+
+    function isInsideCake(shape, verts, x, y) {
+      if (shape.sides === 0) {
+        var dx = x - SIZE / 2, dy = y - SIZE / 2;
+        return dx * dx + dy * dy <= shape.r * shape.r;
+      }
+      for (var i = 0; i < verts.length; i++) {
+        var a = verts[i], b = verts[(i + 1) % verts.length];
+        if ((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]) < 0) return false;
+      }
+      return true;
+    }
+
+    // ---------- 切り分けの判定 ----------
+    // 切り口をマスに描き、切り口で仕切られた領域を1切れずつ数える。
+    function evaluate(cutStrokes) {
+      var total = GRID * GRID;
+      var inside = cake.inside;
+      var owner = new Int16Array(total);   // そのマスを切った線（番号+1）
+      var labels = new Int32Array(total);
+
+      function cellAt(x, y) {
+        var cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+        if (cx < 0 || cy < 0 || cx >= GRID || cy >= GRID) return -1;
+        return cy * GRID + cx;
+      }
+      function markSegment(x0, y0, x1, y1, id) {
+        var steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (CELL * 0.5)));
+        for (var i = 0; i <= steps; i++) {
+          var c = cellAt(x0 + ((x1 - x0) * i) / steps, y0 + ((y1 - y0) * i) / steps);
+          if (c >= 0) owner[c] = id;
+        }
+      }
+      // 端が縁や別の切り口の手前で止まっていたら、向きを保ったまま EXTEND まで伸ばしてつなぐ。
+      // 何にも届かなければ伸ばさない（ケーキの途中で止めた線はそのまま）。
+      function extendEnd(end, back, id) {
+        var dx = end[0] - back[0], dy = end[1] - back[1];
+        var len = Math.hypot(dx, dy);
+        if (len === 0) return;
+        dx /= len; dy /= len;
+        var path = [];
+        for (var d = 0; d <= EXTEND; d += CELL * 0.5) {
+          var c = cellAt(end[0] + dx * d, end[1] + dy * d);
+          if (c < 0 || !inside[c] || (owner[c] && owner[c] !== id)) {
+            path.forEach(function (p) { owner[p] = id; });
+            return;
+          }
+          path.push(c);
+        }
+      }
+
+      cutStrokes.forEach(function (s, idx) {
+        for (var i = 1; i < s.length; i++) markSegment(s[i - 1][0], s[i - 1][1], s[i][0], s[i][1], idx + 1);
+      });
+      cutStrokes.forEach(function (s, idx) {
+        if (s.length < 2) return;
+        extendEnd(s[s.length - 1], s[Math.max(0, s.length - 4)], idx + 1);
+        extendEnd(s[0], s[Math.min(s.length - 1, 3)], idx + 1);
+      });
+
+      // 切り口で仕切られた領域に番号を振る（上下左右でつながるマスを同じ領域とする）
+      var next = 0;
+      var stack = [];
+      for (var start = 0; start < total; start++) {
+        if (!inside[start] || owner[start] || labels[start]) continue;
+        next++;
+        labels[start] = next;
+        stack.push(start);
+        while (stack.length) {
+          var c = stack.pop();
+          var x = c % GRID;
+          var nb = [x > 0 ? c - 1 : -1, x < GRID - 1 ? c + 1 : -1, c - GRID, c + GRID];
+          for (var k = 0; k < 4; k++) {
+            var m = nb[k];
+            if (m < 0 || m >= total || !inside[m] || owner[m] || labels[m]) continue;
+            labels[m] = next;
+            stack.push(m);
+          }
+        }
+      }
+      // 切り口のマスは隣の領域に入れる（切り口の太さで面積が消えないように）
+      for (var pass = 0; pass < 8; pass++) {
+        var changed = false;
+        for (var j = 0; j < total; j++) {
+          if (!inside[j] || labels[j]) continue;
+          var jx = j % GRID;
+          var l = (jx > 0 && labels[j - 1]) || (jx < GRID - 1 && labels[j + 1])
+            || (j >= GRID && labels[j - GRID]) || (j + GRID < total && labels[j + GRID]) || 0;
+          if (l) { labels[j] = l; changed = true; }
+        }
+        if (!changed) break;
+      }
+
+      var area = [], sx = [], sy = [];
+      for (var q = 0; q <= next; q++) { area.push(0); sx.push(0); sy.push(0); }
+      var cakeCells = 0;
+      for (var t = 0; t < total; t++) {
+        if (!inside[t]) continue;
+        cakeCells++;
+        var lb = labels[t];
+        if (!lb) continue;
+        area[lb]++;
+        sx[lb] += t % GRID;
+        sy[lb] += Math.floor(t / GRID);
+      }
+
+      var pieces = [];
+      var pieceOf = [-1];       // 領域番号 -> 何切れ目か（くずは -1）
+      var crumb = 0;
+      for (var r = 1; r <= next; r++) {
+        var pct = (area[r] / cakeCells) * 100;
+        if (pct < CRUMB_PCT) {
+          crumb += pct;
+          pieceOf.push(-1);
+          continue;
+        }
+        pieceOf.push(pieces.length);
+        pieces.push({
+          p: pct,
+          x: Math.round(((sx[r] / area[r]) + 0.5) * CELL),
+          y: Math.round(((sy[r] / area[r]) + 0.5) * CELL)
+        });
+      }
+      return { labels: labels, pieceOf: pieceOf, pieces: pieces, crumb: crumb };
+    }
+
+    function judge(id, sub) {
+      var ev = evaluate(sub.strokes);
+      var ideal = 100 / cake.n;
+      var ok = ev.pieces.length === cake.n;
+      var dev = 0;
+      ev.pieces.forEach(function (pc) { dev = Math.max(dev, Math.abs(pc.p - ideal)); });
+      dev = Math.round(dev * 10) / 10;
+      return {
+        id: id,
+        strokes: sub.strokes,
+        ms: sub.ms,
+        missing: !!sub.missing,
+        count: ev.pieces.length,
+        pieces: ev.pieces.map(function (pc) { return { p: Math.round(pc.p * 10) / 10, x: pc.x, y: pc.y }; }),
+        crumb: Math.round(ev.crumb * 10) / 10,
+        dev: dev,
+        ok: ok,
+        score: ok ? Math.max(0, Math.round((1 - dev / ideal) * 1000) / 10) : 0,
+        title: titleOf(ok, ev.pieces.length, sub.strokes.length, dev / ideal)
+      };
+    }
+
+    // 称号。ずれは理想の大きさに対する割合で見るので、何等分でも同じ基準になる。
+    function titleOf(ok, count, strokeCount, rel) {
+      if (strokeCount === 0) return '手つかず';
+      if (!ok) return count < cake.n ? '切り足りない' : '切りすぎ';
+      if (rel <= 0.04) return '神の包丁';
+      if (rel <= 0.1) return 'パティシエ';
+      if (rel <= 0.2) return 'ケーキ職人';
+      if (rel <= 0.35) return '見習い';
+      return 'ケンカのもと';
+    }
+
+    // 順位: 指示どおりの数に切れた人が上。その中はずれが小さい順、同じなら OK が早い順。
+    // 数が違う人は、指示との差が小さい順、同じなら OK が早い順。
+    function rank(results) {
+      return results.slice().sort(function (a, b) {
+        if (a.ok !== b.ok) return a.ok ? -1 : 1;
+        if (a.ok && a.dev !== b.dev) return a.dev - b.dev;
+        if (!a.ok) {
+          var da = Math.abs(a.count - cake.n), db = Math.abs(b.count - cake.n);
+          if (da !== db) return da - db;
+        }
+        if (a.ms !== b.ms) return a.ms - b.ms;
+        return order.indexOf(a.id) - order.indexOf(b.id);
+      }).map(function (r) { return r.id; });
+    }
+
+    // ---------- 進行 ----------
+    function resetMatch() {
+      cake = makeCake(String(config.seriesId) + ':' + config.matchNumber);
+      startedAt = Date.now();
+      playAt = startedAt + INTRO_MS;
+      deadline = playAt + PLAY_MS;
+      strokes = [];
+      drawing = null;
+      live = null;
+      submissions = {};
+      reveal = null;
+      revealAt = 0;
+      revealEval = {};
+      overSent = false;
+      lastBeepSec = -1;
+      lastStampStep = -1;
+    }
+
+    function mySubmitted() { return isPlayer && !!submissions[myId]; }
+    function canDraw() {
+      return isPlayer && Hitsumabushi.phase !== 'over' && !reveal && !mySubmitted()
+        && Date.now() >= playAt && Date.now() < deadline;
+    }
+
+    // 途中から入った人が残り時間を合わせられるよう、進行役の時計での開始時刻も登録する。
+    // 端末の時計のずれの分だけ残り時間の表示がずれるが、締め切りは進行役が決めるので勝敗には響かない。
+    function publishState() {
+      if (!Hitsumabushi.isGameMaster()) return;
+      Hitsumabushi.setMatchState(reveal ? { reveal: reveal } : { submissions: submissions, startedAt: startedAt });
+    }
+
+    function syncClock(gmStartedAt) {
+      startedAt = gmStartedAt;
+      playAt = startedAt + INTRO_MS;
+      deadline = playAt + PLAY_MS;
+      lastBeepSec = -1;
+    }
+
+    function sanitizeStrokes(raw) {
+      if (!Array.isArray(raw)) return [];
+      return raw.slice(0, cake.n).filter(Array.isArray).map(function (s) {
+        return s.slice(0, MAX_POINTS).filter(function (p) {
+          return Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]);
+        }).map(function (p) {
+          return [Math.max(-100, Math.min(SIZE + 100, Math.round(p[0]))), Math.max(-100, Math.min(SIZE + 100, Math.round(p[1])))];
+        });
+      }).filter(function (s) { return s.length >= 2; });
+    }
+
+    // 提出を記録する。自分の提出も、届いた提出もここを通る。
+    function recordSubmission(id, sub) {
+      if (reveal || submissions[id] || order.indexOf(id) === -1) return;
+      submissions[id] = sub;
+      publishState();
+      if (Hitsumabushi.isGameMaster() && order.every(function (pid) { return submissions[pid]; })) finalize();
+      render();
+    }
+
+    function submit() {
+      if (!isPlayer || mySubmitted() || reveal || Hitsumabushi.phase === 'over') return;
+      if (drawing) finishStroke();
+      var ms = Math.max(0, Math.min(PLAY_MS, Date.now() - playAt));
+      var sub = { strokes: strokes, ms: ms };
+      Hitsumabushi.sendGameData({ type: 'SUBMIT', strokes: strokes, ms: ms });
+      beep(880, 120);
+      recordSubmission(myId, sub);
+    }
+
+    // 進行役だけが判定して、全員に同じ答え合わせを配る
+    function finalize() {
+      if (reveal) return;
+      var results = order.map(function (id) {
+        return judge(id, submissions[id] || { strokes: [], ms: PLAY_MS, missing: true });
+      });
+      var data = { results: results, ranking: rank(results) };
+      Hitsumabushi.sendGameData({ type: 'REVEAL', results: data.results, ranking: data.ranking });
+      startReveal(data, false);
+      publishState();
+    }
+
+    function startReveal(data, skipAnimation) {
+      reveal = data;
+      revealAt = skipAnimation ? Date.now() - revealTotal() : Date.now();
+      revealEval = {};
+      drawing = null;
+      data.results.forEach(function (r) { revealEval[r.id] = evaluate(r.strokes); });
+      render();
+    }
+
+    function revealTotal() { return reveal.ranking.length * STEP_MS; }
+    function resultOf(id) {
+      for (var i = 0; i < reveal.results.length; i++) if (reveal.results[i].id === id) return reveal.results[i];
+      return null;
+    }
+    // 答え合わせは部屋の順番で1人ずつ。順位が先に分からないよう、順位とは関係ない順にする。
+    function revealOrder() { return order.slice(); }
+
+    function tick() {
+      if (!config) return;
+      if (Hitsumabushi.phase === 'over') { render(); return; }
+      var now = Date.now();
+      if (!reveal) {
+        if (isPlayer && !mySubmitted() && now >= deadline) submit();
+        if (Hitsumabushi.isGameMaster() && now >= deadline + GRACE_MS) finalize();
+        countdownBeep(now);
+      } else if (Hitsumabushi.isGameMaster() && !overSent && now >= revealAt + revealTotal() + FINAL_MS) {
+        overSent = true;
+        var scores = {};
+        reveal.results.forEach(function (r) { scores[r.id] = r.score; });
+        Hitsumabushi.sendGameOver({ winnerPlayerId: reveal.ranking[0], rankings: reveal.ranking, scores: scores });
+      }
+      render();
+    }
+
+    function countdownBeep(now) {
+      var sec;
+      if (now < playAt) sec = Math.ceil((playAt - now) / 1000);
+      else if (now >= deadline - 5000 && now < deadline) sec = Math.ceil((deadline - now) / 1000);
+      else return;
+      if (sec === lastBeepSec) return;
+      lastBeepSec = sec;
+      beep(now < playAt ? 440 : 660, 90);
+    }
+
+    // ---------- 入力 ----------
+    function toLogical(e) {
+      var rect = canvasEl.getBoundingClientRect();
+      if (!rect.width || !rect.height) return null;
+      return [((e.clientX - rect.left) / rect.width) * SIZE, ((e.clientY - rect.top) / rect.height) * SIZE];
+    }
+
+    function onPointerDown(e) {
+      unlockAudio();
+      if (!canDraw() || strokes.length >= cake.n) return;
+      var p = toLogical(e);
+      if (!p) return;
+      e.preventDefault();
+      try { canvasEl.setPointerCapture(e.pointerId); } catch (err) { /* マウス以外で捕捉できない環境では捕捉なしで続ける */ }
+      drawing = [p];
+      draw();
+    }
+    function onPointerMove(e) {
+      if (!drawing) return;
+      var p = toLogical(e);
+      if (!p) return;
+      var last = drawing[drawing.length - 1];
+      if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 4) return;
+      drawing.push(p);
+      draw();
+    }
+    function onPointerUp() {
+      if (drawing) finishStroke();
+    }
+
+    function finishStroke() {
+      var raw = drawing;
+      drawing = null;
+      if (!canDraw() && !(isPlayer && !mySubmitted() && Date.now() >= deadline)) { render(); return; }
+      var s = simplify(raw);
+      if (strokeLength(s) < 30 || strokes.length >= cake.n) { render(); return; }
+      strokes.push(s);
+      updateLive();
+      beep(330 + strokes.length * 110, 90, 'triangle');
+      render();
+    }
+
+    function strokeLength(s) {
+      var len = 0;
+      for (var i = 1; i < s.length; i++) len += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
+      return len;
+    }
+
+    // なぞった線を等間隔に打ち直す。送る点の数を MAX_POINTS までに抑える。
+    function simplify(raw) {
+      var len = strokeLength(raw);
+      if (raw.length < 2 || len === 0) return [];
+      var step = Math.max(8, len / (MAX_POINTS - 1));
+      var out = [raw[0]];
+      var need = step;
+      var acc = 0;
+      for (var i = 1; i < raw.length; i++) {
+        var a = raw[i - 1], b = raw[i];
+        var seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        while (acc + seg >= need && out.length < MAX_POINTS - 1) {
+          var t = (need - acc) / seg;
+          out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+          need += step;
+        }
+        acc += seg;
+      }
+      out.push(raw[raw.length - 1]);
+      return out.map(function (p) { return [Math.round(p[0]), Math.round(p[1])]; });
+    }
+
+    function updateLive() {
+      live = strokes.length ? evaluate(strokes) : null;
+    }
+
+    function undo() {
+      if (!canDraw() || !strokes.length) return;
+      strokes.pop();
+      updateLive();
+      beep(220, 80);
+      render();
+    }
+    function clearAll() {
+      if (!canDraw() || !strokes.length) return;
+      strokes = [];
+      updateLive();
+      beep(180, 120);
+      render();
+    }
+
+    // ---------- 音 ----------
+    var audio = null;
+    var muted = false;
+    function unlockAudio() {
+      if (audio) return;
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audio = new Ctx();
+      if (audio.state === 'suspended') audio.resume();
+    }
+    function beep(freq, ms, type, gain) {
+      if (!audio || muted) return;
+      var osc = audio.createOscillator();
+      var g = audio.createGain();
+      osc.type = type || 'square';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(gain || 0.06, audio.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + ms / 1000);
+      osc.connect(g);
+      g.connect(audio.destination);
+      osc.start();
+      osc.stop(audio.currentTime + ms / 1000);
+    }
+
+    // ---------- 描画 ----------
+    var canvasEl, ctx, stageEl, promptEl, timerFillEl, timerTextEl, rosterEl, bannerEl, countEl, stampEl;
+    var controlsEl, infoEl, undoBtn, clearBtn, okBtn, rankingEl;
+    var side = 0;               // canvas の表示上の1辺（CSS px）
+    var dpr = 1;
+
+    function nameOf(id) {
+      if (id === myId) return 'あなた';
+      return players[id] ? players[id].name : id;
+    }
+    function fmtPct(v) { return v.toFixed(1) + '%'; }
+    function fmtSec(ms) { return (ms / 1000).toFixed(1) + '秒'; }
+    function idealPct() { return 100 / cake.n; }
+
+    function resultLine(r) {
+      if (r.missing) return '未提出';
+      if (!r.ok) return r.count + '切れ（' + cake.n + '切れのはず）';
+      return '最大のずれ ±' + r.dev.toFixed(1) + '%';
+    }
+
+    // 答え合わせの今の位置。step は何人目か、t はその人の中での経過時間。
+    function revealPos(now) {
+      var el = now - revealAt;
+      var n = reveal.ranking.length;
+      if (el >= n * STEP_MS) return { step: n, t: 0 };
+      return { step: Math.max(0, Math.floor(el / STEP_MS)), t: el - Math.floor(el / STEP_MS) * STEP_MS };
+    }
+
+    function render() {
+      if (!config) return;
+      if (Hitsumabushi.phase === 'over' && !reveal) return;
+      var now = Date.now();
+      var finished = Hitsumabushi.phase === 'over' || (reveal && revealPos(now).step >= reveal.ranking.length);
+
+      renderHud(now);
+      renderRoster(now, finished);
+      renderStageText(now, finished);
+      renderControls(now);
+      renderRanking(finished);
+      draw();
+    }
+
+    function renderHud(now) {
+      promptEl.innerHTML = '';
+      promptEl.appendChild(document.createTextNode(cake.shape.name + 'ケーキを '));
+      var b = document.createElement('b');
+      b.textContent = String(cake.n);
+      promptEl.appendChild(b);
+      promptEl.appendChild(document.createTextNode(' 等分！'));
+
+      var left = reveal ? 0 : now < playAt ? PLAY_MS : Math.max(0, deadline - now);
+      timerFillEl.style.width = ((left / PLAY_MS) * 100).toFixed(1) + '%';
+      timerFillEl.classList.toggle('low', left <= 5000);
+      timerTextEl.textContent = reveal ? '答え合わせ' : '残り ' + Math.ceil(left / 1000) + '秒';
+    }
+
+    function renderRoster(now, finished) {
+      var shown = {};
+      var focus = null;
+      if (reveal) {
+        var pos = finished ? { step: reveal.ranking.length, t: 0 } : revealPos(now);
+        revealOrder().forEach(function (id, i) {
+          if (i < pos.step || (i === pos.step && pos.t >= stampTime())) shown[id] = true;
+        });
+        if (!finished) focus = revealOrder()[pos.step];
+      }
+      rosterEl.innerHTML = '';
+      order.forEach(function (id) {
+        var chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.setAttribute('data-player', id);
+        var dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = players[id].color;
+        var name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = nameOf(id);
+        var state = document.createElement('span');
+        state.className = 'state';
+        if (reveal) {
+          if (shown[id]) {
+            var r = resultOf(id);
+            state.textContent = finished ? (reveal.ranking.indexOf(id) + 1) + '位' : r.title;
+            if (finished && reveal.ranking[0] === id) chip.className += ' winner';
+          } else {
+            state.textContent = '？';
+          }
+          if (id === focus) chip.className += ' focus';
+        } else if (submissions[id]) {
+          chip.className += ' done';
+          state.textContent = 'OK!';
+        } else {
+          state.textContent = now < playAt ? '' : '切り中…';
+        }
+        chip.appendChild(dot);
+        chip.appendChild(name);
+        chip.appendChild(state);
+        rosterEl.appendChild(chip);
+      });
+    }
+
+    function stampTime() { return 2300; }
+
+    function renderStageText(now, finished) {
+      countEl.textContent = !reveal && now < playAt ? String(Math.ceil((playAt - now) / 1000)) : '';
+      stampEl.innerHTML = '';
+      stampEl.className = 'stamp';
+
+      if (!reveal) {
+        if (now < playAt) bannerEl.textContent = isPlayer ? 'なぞって切ろう' : '';
+        else if (mySubmitted()) bannerEl.textContent = 'ほかの人を待っています…';
+        else if (!isPlayer) bannerEl.textContent = 'みんな切っています…';
+        else if (now >= deadline) bannerEl.textContent = '時間切れ！';
+        else bannerEl.textContent = '';
+        return;
+      }
+
+      var id, showStamp;
+      if (finished) {
+        id = reveal.ranking[0];
+        bannerEl.textContent = '🏆 ' + nameOf(id) + (id === myId ? 'の勝ち！' : ' の勝ち！');
+        showStamp = false;
+      } else {
+        var pos = revealPos(now);
+        id = revealOrder()[pos.step];
+        // 順位は全員の答え合わせが終わるまで出さない
+        bannerEl.textContent = nameOf(id) + ' のケーキ';
+        showStamp = pos.t >= stampTime();
+        if (showStamp && lastStampStep !== pos.step) {
+          lastStampStep = pos.step;
+          var r0 = resultOf(id);
+          if (r0.ok) beep(784, 260, 'triangle', 0.08);
+          else beep(140, 300, 'sawtooth', 0.07);
+        }
+      }
+      if (!showStamp) return;
+      var r = resultOf(id);
+      stampEl.className = 'stamp' + (r.ok && r.dev / idealPct() <= 0.1 ? ' good' : '');
+      var title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = r.title;
+      var sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = resultLine(r);
+      stampEl.appendChild(title);
+      stampEl.appendChild(sub);
+    }
+
+    function renderControls(now) {
+      var visible = isPlayer && !reveal;
+      controlsEl.classList.toggle('hidden', !visible);
+      if (!visible) return;
+      var active = canDraw();
+      undoBtn.disabled = !active || !strokes.length;
+      clearBtn.disabled = !active || !strokes.length;
+      okBtn.disabled = !active || !strokes.length;
+      if (mySubmitted()) {
+        infoEl.innerHTML = '<b>OK!</b> 答え合わせを待っています';
+        return;
+      }
+      var pieces = live ? live.pieces.length : 1;
+      infoEl.innerHTML = '線 <b>' + strokes.length + '/' + cake.n + '</b>　いま <b>' + pieces + '</b> 切れ';
+      if (now < playAt) infoEl.innerHTML = '線は ' + cake.n + ' 本まで引けます';
+    }
+
+    function renderRanking(finished) {
+      rankingEl.classList.toggle('hidden', !finished);
+      rankingEl.innerHTML = '';
+      if (!finished) return;
+      reveal.ranking.forEach(function (id, i) {
+        var r = resultOf(id);
+        var row = document.createElement('div');
+        row.className = 'rank-row' + (i === 0 ? ' first' : '');
+        row.setAttribute('data-player', id);
+        [
+          ['pos', (i + 1) + '位'],
+          ['name', nameOf(id)],
+          ['title', r.title],
+          ['detail', r.missing ? '未提出' : (r.ok ? '±' + r.dev.toFixed(1) + '%' : r.count + '切れ') + '・' + fmtSec(r.ms)]
+        ].forEach(function (cell) {
+          var span = document.createElement('span');
+          span.className = cell[0];
+          span.textContent = cell[1];
+          row.appendChild(span);
+        });
+        rankingEl.appendChild(row);
+      });
+    }
+
+    // ---------- canvas ----------
+    function fitCanvas() {
+      var w = stageEl.clientWidth, h = stageEl.clientHeight;
+      if (!w || !h) return;     // 初期化直後や非表示の間は 0 になる
+      var s = Math.floor(Math.min(w, h) - 8);
+      if (s <= 0 || s === side) return;
+      side = s;
+      dpr = window.devicePixelRatio || 1;
+      canvasEl.style.width = side + 'px';
+      canvasEl.style.height = side + 'px';
+      canvasEl.width = Math.round(side * dpr);
+      canvasEl.height = Math.round(side * dpr);
+      draw();
+    }
+
+    function cakePath() {
+      ctx.beginPath();
+      if (cake.shape.sides === 0) {
+        ctx.arc(SIZE / 2, SIZE / 2, cake.shape.r, 0, Math.PI * 2);
+      } else {
+        cake.verts.forEach(function (v, i) { if (i === 0) ctx.moveTo(v[0], v[1]); else ctx.lineTo(v[0], v[1]); });
+        ctx.closePath();
+      }
+    }
+
+    function drawCake() {
+      cakePath();
+      var g = ctx.createRadialGradient(SIZE / 2, SIZE / 2 - 120, 40, SIZE / 2, SIZE / 2, 520);
+      g.addColorStop(0, '#fff4f8');
+      g.addColorStop(1, '#f7b8d2');
+      ctx.fillStyle = g;
+      ctx.shadowColor = 'rgba(255, 0, 127, 0.8)';
+      ctx.shadowBlur = 30;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = '#ff007f';
+      ctx.stroke();
+    }
+
+    function drawStroke(s, color, width) {
+      if (s.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(s[0][0], s[0][1]);
+      for (var i = 1; i < s.length; i++) ctx.lineTo(s[i][0], s[i][1]);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = width + 6;
+      ctx.strokeStyle = 'rgba(10, 11, 16, 0.55)';
+      ctx.stroke();
+      ctx.lineWidth = width;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
+
+    // 切り分けた結果を色で塗った画像。答え合わせの1人ぶんごとに1回だけ作る。
+    var pieceImages = {};
+    function pieceImage(id) {
+      if (pieceImages[id]) return pieceImages[id];
+      var ev = revealEval[id];
+      var img = document.createElement('canvas');
+      img.width = GRID;
+      img.height = GRID;
+      var ictx = img.getContext('2d');
+      var data = ictx.createImageData(GRID, GRID);
+      var rgb = PIECE_COLORS.map(function (c) {
+        return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+      });
+      for (var i = 0; i < GRID * GRID; i++) {
+        var l = ev.labels[i];
+        if (!l) continue;
+        var pi = ev.pieceOf[l];
+        var col = pi < 0 ? [80, 80, 90] : rgb[pi % rgb.length];
+        data.data[i * 4] = col[0];
+        data.data[i * 4 + 1] = col[1];
+        data.data[i * 4 + 2] = col[2];
+        data.data[i * 4 + 3] = 150;
+      }
+      ictx.putImageData(data, 0, 0);
+      pieceImages[id] = img;
+      return img;
+    }
+
+    function drawPieceLabels(r, count) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 54px "Segoe UI", sans-serif';
+      for (var i = 0; i < count && i < r.pieces.length; i++) {
+        var pc = r.pieces[i];
+        var text = fmtPct(pc.p);
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = 'rgba(10, 11, 16, 0.85)';
+        ctx.strokeText(text, pc.x, pc.y);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(text, pc.x, pc.y);
+      }
+    }
+
+    function draw() {
+      if (!ctx || !side || !config) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      var scale = (side * dpr) / SIZE;
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      drawCake();
+
+      if (!reveal) {
+        // 切っている間、ほかの人の切り口は見せない
+        if (isPlayer) {
+          strokes.forEach(function (s) { drawStroke(s, '#00f0ff', 9); });
+          if (drawing) drawStroke(drawing, '#ffe600', 9);
+        }
+        return;
+      }
+
+      var finished = Hitsumabushi.phase === 'over' || revealPos(Date.now()).step >= reveal.ranking.length;
+      var id, t;
+      if (finished) {
+        id = reveal.ranking[0];
+        t = STEP_MS;
+      } else {
+        var pos = revealPos(Date.now());
+        id = revealOrder()[pos.step];
+        t = pos.t;
+      }
+      var r = resultOf(id);
+      var fill = Math.max(0, Math.min(1, (t - 500) / 600));
+      if (fill > 0) {
+        ctx.save();
+        cakePath();
+        ctx.clip();
+        ctx.globalAlpha = fill;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(pieceImage(id), 0, 0, SIZE, SIZE);
+        ctx.restore();
+      }
+      r.strokes.forEach(function (s) { drawStroke(s, '#ffffff', 9); });
+      var labelCount = t < 1100 ? 0 : Math.ceil(((t - 1100) / 1000) * r.pieces.length);
+      drawPieceLabels(r, Math.min(r.pieces.length, labelCount));
+    }
+
+    function applyObsMode(isObs) {
+      document.body.classList.toggle('transparent', isObs);
+    }
+
+    Hitsumabushi.init({
+      onCreateMatch: function () {
+        canvasEl = document.getElementById('cake');
+        ctx = canvasEl.getContext('2d');
+        stageEl = document.getElementById('stage');
+        promptEl = document.getElementById('prompt');
+        timerFillEl = document.getElementById('timerFill');
+        timerTextEl = document.getElementById('timerText');
+        rosterEl = document.getElementById('roster');
+        bannerEl = document.getElementById('banner');
+        countEl = document.getElementById('count');
+        stampEl = document.getElementById('stamp');
+        controlsEl = document.getElementById('controls');
+        infoEl = document.getElementById('info');
+        undoBtn = document.getElementById('undoBtn');
+        clearBtn = document.getElementById('clearBtn');
+        okBtn = document.getElementById('okBtn');
+        rankingEl = document.getElementById('ranking');
+
+        canvasEl.addEventListener('pointerdown', onPointerDown);
+        canvasEl.addEventListener('pointermove', onPointerMove);
+        canvasEl.addEventListener('pointerup', onPointerUp);
+        canvasEl.addEventListener('pointercancel', onPointerUp);
+        // なぞる操作で画面がスクロール・ズームしないようにする
+        canvasEl.addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
+        canvasEl.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+
+        undoBtn.addEventListener('click', undo);
+        clearBtn.addEventListener('click', clearAll);
+        okBtn.addEventListener('click', function () {
+          unlockAudio();
+          if (canDraw() && strokes.length) submit();
+        });
+        document.addEventListener('pointerdown', unlockAudio);
+        var muteBtn = document.getElementById('muteBtn');
+        muteBtn.addEventListener('click', function () {
+          unlockAudio();
+          muted = !muted;
+          muteBtn.textContent = muted ? '🔇' : '🔊';
+        });
+
+        new ResizeObserver(fitCanvas).observe(stageEl);
+      },
+
+      onStartMatch: function (cfg) {
+        config = cfg;
+        myId = cfg.localPlayerId;
+        document.body.classList.toggle('spectating', Hitsumabushi.isSpectator());
+        applyObsMode(cfg.isObsMode);
+
+        players = {};
+        cfg.players.forEach(function (p) { players[p.id] = { name: p.name, color: p.color }; });
+        order = cfg.players.map(function (p) { return p.id; });
+        // 着席していない部屋の作成者は観戦者ではないが、切る人でもない
+        isPlayer = myId !== null && !Hitsumabushi.isSpectator() && order.indexOf(myId) !== -1;
+
+        resetMatch();
+        pieceImages = {};
+        if (ticker) clearInterval(ticker);
+        ticker = setInterval(tick, 50);
+        publishState();
+        render();
+      },
+
+      onMatchState: function (state) {
+        if (state.reveal) {
+          startReveal(state.reveal, true);
+          return;
+        }
+        if (typeof state.startedAt === 'number') syncClock(state.startedAt);
+        Object.keys(state.submissions || {}).forEach(function (id) {
+          if (order.indexOf(id) !== -1) submissions[id] = state.submissions[id];
+        });
+        render();
+      },
+
+      onGameData: function (payload, senderId) {
+        if (Hitsumabushi.phase === 'over' || !payload || !config) return;
+        if (payload.type === 'SUBMIT') {
+          recordSubmission(senderId, {
+            strokes: sanitizeStrokes(payload.strokes),
+            ms: Math.max(0, Math.min(PLAY_MS, Number(payload.ms) || 0))
+          });
+        } else if (payload.type === 'REVEAL' && senderId === config.gameMasterId && !reveal) {
+          startReveal({ results: payload.results, ranking: payload.ranking }, false);
+        }
+      },
+
+      onError: function (code, detail) {
+        console.error('[neon-cake-cut]', code, detail && detail.message);
+      }
+    });
+  </script>
+</body>
+</html>
