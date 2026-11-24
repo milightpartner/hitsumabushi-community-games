@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ネオン・ドッジサバイバル</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      background-color: #0a0b10;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 8px;
+      transition: background-color 0.3s;
+    }
+
+    body.transparent { background-color: transparent !important; }
+    :root:has(body.transparent) { background-color: transparent !important; }
+
+    #app {
+      width: 100%;
+      max-width: 820px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .card {
+      background: rgba(22, 26, 42, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    }
+
+    /* 上部HUD: タイトル・状況・経過時間 */
+    .hud {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px 4px 12px;
+      min-height: 52px;
+    }
+    .hud-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .hud-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .hud-title { color: #00f0ff; font-weight: bold; font-size: 0.75rem; letter-spacing: 1px; white-space: nowrap; }
+    .prompt {
+      flex: 1;
+      min-width: 0;
+      font-weight: bold;
+      font-size: 1rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .clock { font-size: 0.85rem; font-weight: bold; color: #39ff14; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .clock.danger { color: #ff3b5c; }
+    .spectator-badge {
+      display: none;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.12);
+      border: 1px solid #ffe600;
+      color: #ffe600;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    .mute-btn {
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      background: rgba(0, 240, 255, 0.08);
+      color: #fff;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    /* 参加者 */
+    .roster { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      flex: 1 1 22%;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(22, 26, 42, 0.85);
+      font-size: 0.8rem;
+    }
+    .chip .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .chip .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip .state { font-size: 0.7rem; color: #94a3b8; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .chip.alive .state { color: #39ff14; }
+    .chip.out { opacity: 0.5; }
+    .chip.out .name { text-decoration: line-through; }
+    .chip.winner { border-color: #ffe600; background: rgba(255, 230, 0, 0.12); opacity: 1; }
+    .chip.winner .name { text-decoration: none; }
+    .chip.winner .state { color: #ffe600; font-weight: bold; }
+
+    /* フィールド */
+    .stage {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #field {
+      display: block;
+      touch-action: none;
+    }
+    body.playing .stage { cursor: grab; touch-action: none; }
+    body.playing.dragging .stage { cursor: grabbing; }
+    body.spectating .stage { pointer-events: none; }
+    .banner {
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 94%;
+      padding: 4px 14px;
+      border-radius: 999px;
+      background: rgba(10, 11, 16, 0.8);
+      border: 1px solid rgba(0, 240, 255, 0.5);
+      font-weight: bold;
+      font-size: 0.95rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+    .banner:empty { display: none; }
+    .count {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(3rem, 18vmin, 7rem);
+      font-weight: bold;
+      color: #ffe600;
+      text-shadow: 0 0 24px rgba(255, 230, 0, 0.8), 0 0 4px #0a0b10;
+      pointer-events: none;
+    }
+    .count:empty { display: none; }
+
+    /* 最終結果 */
+    .ranking { flex-shrink: 0; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+    .ranking.hidden { display: none; }
+    .rank-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; min-width: 0; }
+    .rank-row .pos { width: 2.4em; color: #94a3b8; font-weight: bold; flex-shrink: 0; }
+    .rank-row .name { flex: 1; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-row .detail { color: #94a3b8; font-size: 0.75rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .rank-row.first .pos, .rank-row.first .detail { color: #ffe600; }
+
+    @media (max-width: 640px), (max-height: 560px) {
+      .hud-title { display: none; }
+      .prompt { font-size: 0.9rem; }
+      .chip { flex-basis: 40%; padding: 3px 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="hud card">
+      <div class="hud-main">
+        <div class="hud-row">
+          <span class="hud-title">DODGE SURVIVAL</span>
+          <span class="prompt" id="prompt">接続中...</span>
+          <span class="spectator-badge">👀 観戦中</span>
+          <span class="clock" id="clock"></span>
+        </div>
+      </div>
+      <button class="mute-btn" id="muteBtn" aria-label="音のオン・オフ">🔊</button>
+    </div>
+
+    <div class="roster" id="roster"></div>
+
+    <div class="stage card" id="stage">
+      <canvas id="field" width="0" height="0"></canvas>
+      <div class="banner" id="banner"></div>
+      <div class="count" id="count"></div>
+    </div>
+
+    <div class="ranking card hidden" id="ranking"></div>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/0.28.0/hitsumabushi-sdk.js"></script>
+  <script>
+    // ---------- ルール ----------
+    var INTRO_MS = 3000;        // 試合開始から弾が出始めるまで
+    var ZONE_START = 75000;     // ここから外側の壁が迫る（弾が出始めてからの時間）
+    var ZONE_END = 90000;       // ここでフィールドが消える。全員がこれまでに脱落する
+    // 進行役が、届かない脱落の報告を待つ猶予。これを過ぎても報告の無い人（回線が切れた人）は、
+    // 壁が閉じた時刻に脱落したものとして順位を決め、試合を止めない。
+    var END_GRACE_MS = 3000;
+    var RESULT_MS = 2500;       // 決着を見せてから結果を報告するまで
+
+    var ARENA = 600;            // フィールドは 600×600 の論理座標
+    var PLAYER_R = 8;           // プレイヤー（ゴースト）の当たり判定の半径。見た目（幅21）より少しだけ小さい
+    var MAX_SPEED = 0.32;       // 点が動ける速さの上限（px / ms）
+    var POS_SEND_MS = 66;       // 位置を送る間隔の下限（約15回/秒）
+    var CPU_THINK_MS = 100;     // CPU が動く向きを選び直す間隔
+
+    var PALETTE = ['#00f0ff', '#39ff14', '#ffe600', '#a855f7', '#ff8a00', '#3b82f6', '#f472b6', '#ffffff'];
+    var BULLET_COLOR = '#ff007f';
+
+    // ---------- 試合の状態 ----------
+    var config = null;
+    var myId = null;
+    var isPlayer = false;
+    var teamMode = false;
+    var players = {};           // id -> { name, unit, isCpu, seat }
+    var units = [];             // 勝ち負けの単位（個人戦はプレイヤーID、チーム戦は teamId）。席の順
+    var unitInfo = {};          // unit -> { name, color, members }
+
+    var schedule = [];          // この試合の弾（出る時刻の順）
+    var playAt = 0;             // 弾が出始める時刻（このクライアントの時計）
+    var dots = {};              // id -> { x, y, tx, ty }（自分以外は届いた位置へ寄せて描く）
+    var deaths = {};            // id -> 弾が出始めてから脱落するまでの ms
+    var result = null;          // 進行役が配った結果 { ranking, times }
+    var me = null;              // 自分の点 { x, y, tx, ty, sentX, sentY, sentAt }
+    var keys = {};
+    var lastFrameAt = 0;
+    var lastBeepSec = -1;
+    var cpu = null;             // 進行役だけ: id -> { vx, vy, thinkAt }
+    var cpuSentAt = 0;          // 進行役だけ: CPU の位置を最後に送った時刻
+    var overSent = false;
+    var resultAt = 0;
+    var ticker = null;
+
+    // ---------- 乱数（全員が同じ弾になるよう、連戦IDと試合番号から作る） ----------
+    function makeRng(text) {
+      var h = 2166136261;
+      for (var i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return function () {
+        h = (h + 0x6D2B79F5) | 0;
+        var t = Math.imul(h ^ (h >>> 15), 1 | h);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // ---------- 弾 ----------
+    // 弾は等速でまっすぐ飛ぶ。位置は時刻だけで決まるので、全員が同じ弾を自分で計算できる。
+    // { x0, y0, vx, vy, t0, t1, r }: 時刻 t0 に (x0, y0) から出て、t1 にフィールドの外へ出る。
+    var MARGIN = 30;
+
+    function addBullet(list, x0, y0, angle, speed, t0, r) {
+      var vx = Math.cos(angle) * speed, vy = Math.sin(angle) * speed;
+      var life = Infinity;
+      if (vx > 0) life = Math.min(life, (ARENA + MARGIN - x0) / vx);
+      if (vx < 0) life = Math.min(life, (-MARGIN - x0) / vx);
+      if (vy > 0) life = Math.min(life, (ARENA + MARGIN - y0) / vy);
+      if (vy < 0) life = Math.min(life, (-MARGIN - y0) / vy);
+      if (!(life > 0) || life === Infinity) return;
+      list.push({ x0: x0, y0: y0, vx: vx, vy: vy, t0: Math.round(t0), t1: Math.round(t0 + life), r: r });
+    }
+
+    // フィールドの縁の外側の点。side: 0=上 1=右 2=下 3=左、u: 縁に沿った位置（0〜1）
+    function edgePoint(side, u) {
+      var p = u * ARENA, o = -12;
+      if (side === 0) return [p, o];
+      if (side === 1) return [ARENA - o, p];
+      if (side === 2) return [p, ARENA - o];
+      return [o, p];
+    }
+
+    var PATTERNS = [
+      // 縁から、フィールドの中のどこかを狙って撃つ
+      { weight: 3, make: function (list, t, d, rng, v) {
+        var n = 3 + Math.floor(d / 12);
+        for (var i = 0; i < n; i++) {
+          var from = edgePoint(Math.floor(rng() * 4), rng());
+          var tx = 100 + rng() * 400, ty = 100 + rng() * 400;
+          addBullet(list, from[0], from[1], Math.atan2(ty - from[1], tx - from[0]), v * (0.9 + rng() * 0.3), t + i * 140, 7);
+        }
+      } },
+      // 縁の1点から全方向へ広がるリング
+      { weight: 2, make: function (list, t, d, rng, v) {
+        var from = edgePoint(Math.floor(rng() * 4), 0.15 + rng() * 0.7);
+        var n = Math.min(40, 18 + Math.floor(d / 3)), phase = rng() * Math.PI * 2;
+        for (var i = 0; i < n; i++) addBullet(list, from[0], from[1], phase + (i * Math.PI * 2) / n, v * 0.75, t, 8);
+      } },
+      // すき間が1か所ある壁が、縁から横切る
+      { weight: 2, make: function (list, t, d, rng, v) {
+        var side = Math.floor(rng() * 4);
+        var gap = Math.max(70, 140 - d * 1.2), gapAt = 60 + rng() * (ARENA - 120 - gap);
+        var angle = [Math.PI / 2, Math.PI, -Math.PI / 2, 0][side];
+        for (var p = 12; p < ARENA; p += 32) {
+          if (p > gapAt && p < gapAt + gap) continue;
+          var from = edgePoint(side, p / ARENA);
+          addBullet(list, from[0], from[1], angle, v * 0.7, t, 8);
+        }
+      } },
+      // 角から回りながら撃つらせん
+      { weight: 1, make: function (list, t, d, rng, v) {
+        var corner = Math.floor(rng() * 4);
+        var cx = corner === 1 || corner === 2 ? ARENA + 12 : -12, cy = corner >= 2 ? ARENA + 12 : -12;
+        var base = Math.atan2(ARENA / 2 - cy, ARENA / 2 - cx), dir = rng() < 0.5 ? 1 : -1;
+        for (var i = 0; i < 20; i++) {
+          var a = base + dir * (Math.sin(i * 0.45) * 0.75);
+          addBullet(list, cx, cy, a, v * 0.95, t + i * 80, 7);
+        }
+      } },
+      // 上か下から降る雨（速さがばらばら）
+      { weight: 2, make: function (list, t, d, rng, v) {
+        var down = rng() < 0.5, n = 8 + Math.floor(d / 4);
+        for (var i = 0; i < n; i++) {
+          var from = edgePoint(down ? 0 : 2, rng());
+          addBullet(list, from[0], from[1], down ? Math.PI / 2 : -Math.PI / 2, v * (0.5 + rng() * 0.6), t + rng() * 1200, 6);
+        }
+      } }
+    ];
+
+    function makeSchedule(seedText) {
+      var rng = makeRng(seedText);
+      var total = 0;
+      PATTERNS.forEach(function (p) { total += p.weight; });
+      var list = [];
+      var t = 1000;
+      while (t < ZONE_END) {
+        var d = t / 1000;                                   // 経過秒。これで難しさが上がる
+        var v = Math.min(0.26, 0.12 + d * 0.0025);          // 弾の基本の速さ（px / ms）
+        var pick = rng() * total, pattern = PATTERNS[0];
+        for (var i = 0; i < PATTERNS.length; i++) {
+          pick -= PATTERNS[i].weight;
+          if (pick < 0) { pattern = PATTERNS[i]; break; }
+        }
+        pattern.make(list, t, d, rng, v);
+        t += Math.max(450, 2000 - d * 22) * (0.7 + rng() * 0.6);
+      }
+      list.sort(function (a, b) { return a.t0 - b.t0; });
+      return list;
+    }
+
+    function bulletAt(b, t) { return [b.x0 + b.vx * (t - b.t0), b.y0 + b.vy * (t - b.t0)]; }
+
+    // 時刻 t に飛んでいる弾。出る時刻の順に並んでいるので、出る前の弾まで来たら打ち切る。
+    function liveBullets(t) {
+      var out = [];
+      for (var i = 0; i < schedule.length; i++) {
+        var b = schedule[i];
+        if (b.t0 > t) break;
+        if (b.t1 >= t) out.push(b);
+      }
+      return out;
+    }
+
+    // 外側の壁の内側（安全な範囲）の半分の幅
+    function zoneHalf(t) {
+      if (t < ZONE_START) return ARENA / 2;
+      return Math.max(0, (ARENA / 2) * (1 - (t - ZONE_START) / (ZONE_END - ZONE_START)));
+    }
+
+    // 点 (x, y) が時刻 t に弾か壁に当たっているか
+    function isHit(x, y, t, live) {
+      var half = zoneHalf(t);
+      if (Math.abs(x - ARENA / 2) > half || Math.abs(y - ARENA / 2) > half) return true;
+      for (var i = 0; i < live.length; i++) {
+        var p = bulletAt(live[i], t), r = live[i].r + PLAYER_R;
+        var dx = p[0] - x, dy = p[1] - y;
+        if (dx * dx + dy * dy < r * r) return true;
+      }
+      return false;
+    }
+
+    // ---------- 進行 ----------
+    function unitOf(id) { return players[id] ? players[id].unit : null; }
+    function playTime(now) { return now - playAt; }
+    function isDead(id) { return deaths[id] !== undefined; }
+    function unitAlive(u) { return unitInfo[u].members.some(function (id) { return !isDead(id); }); }
+
+    function startPos(id) {
+      var i = players[id].seat, n = config.players.length;
+      var a = -Math.PI / 2 + (i * Math.PI * 2) / n;
+      return [ARENA / 2 + Math.cos(a) * 110, ARENA / 2 + Math.sin(a) * 110];
+    }
+
+    // 脱落を記録する。自分・届いた報告・CPU（進行役が判定）のどれもここを通る。
+    function recordDeath(id, t) {
+      if (result || isDead(id) || !players[id]) return;
+      deaths[id] = Math.max(0, Math.min(ZONE_END, Math.round(t)));
+      beep(140, 260, 'sawtooth', 0.07);
+      if (!Hitsumabushi.isGameMaster()) return;
+      Hitsumabushi.setMatchState({ playWall: playAt, deaths: deaths });
+      var alive = units.filter(unitAlive);
+      if (alive.length <= 1) finalize(Date.now());
+    }
+
+    function die(now) {
+      var t = playTime(now);
+      Hitsumabushi.sendGameData({ type: 'OUT', t: Math.round(t) });
+      recordDeath(myId, t);
+    }
+
+    // 進行役だけが順位を決めて配る。生き残ったチーム（人）が1位、ほかは脱落の遅い順。
+    // チームの脱落の時刻は、最後まで残ったメンバーの時刻。
+    function finalize(now) {
+      if (result) return;
+      var times = {};
+      units.forEach(function (u) {
+        times[u] = unitAlive(u) ? null : Math.max.apply(null, unitInfo[u].members.map(function (id) { return deaths[id]; }));
+      });
+      var ranking = units.slice().sort(function (a, b) {
+        if ((times[a] === null) !== (times[b] === null)) return times[a] === null ? -1 : 1;
+        if (times[a] !== times[b]) return times[b] - times[a];
+        return units.indexOf(a) - units.indexOf(b);
+      });
+      Hitsumabushi.sendGameData({ type: 'RESULT', ranking: ranking, times: times, deaths: deaths });
+      applyResult({ ranking: ranking, times: times }, now);
+      Hitsumabushi.setMatchState({ playWall: playAt, deaths: deaths, result: result });
+    }
+
+    function applyResult(r, now) {
+      result = r;
+      resultAt = now;
+      beep(784, 400, 'triangle', 0.08);
+      render(now);
+    }
+
+    function tick() {
+      if (!config) return;
+      if (Hitsumabushi.phase === 'over') return;
+      var now = Date.now();
+      var dt = Math.min(100, lastFrameAt ? now - lastFrameAt : 16);
+      lastFrameAt = now;
+      var t = playTime(now);
+      var live = t >= 0 ? liveBullets(t) : [];
+
+      if (!result && t >= 0) {
+        if (me && !isDead(myId)) {
+          moveMe(dt);
+          if (isHit(me.x, me.y, t, live)) die(now);
+          else sendPos(now);
+        }
+        if (cpu) cpuStep(now, t, dt, live);
+        if (Hitsumabushi.isGameMaster() && t >= ZONE_END + END_GRACE_MS) {
+          // 報告の届かない人（回線が切れた人）は、壁が閉じた時刻に脱落したものとする
+          config.players.forEach(function (p) { if (!isDead(p.id)) deaths[p.id] = ZONE_END; });
+          finalize(now);
+        }
+      }
+      if (result && Hitsumabushi.isGameMaster() && !overSent && now >= resultAt + RESULT_MS) {
+        overSent = true;
+        if (teamMode) Hitsumabushi.sendGameOver({ winnerTeamId: result.ranking[0], rankings: result.ranking });
+        else Hitsumabushi.sendGameOver({ winnerPlayerId: result.ranking[0], rankings: result.ranking });
+        return;
+      }
+      countdownBeep(now);
+      render(now, t, live);
+    }
+
+    // ---------- 自分の点 ----------
+    function moveMe(dt) {
+      var kx = (keys.ArrowRight || keys.d ? 1 : 0) - (keys.ArrowLeft || keys.a ? 1 : 0);
+      var ky = (keys.ArrowDown || keys.s ? 1 : 0) - (keys.ArrowUp || keys.w ? 1 : 0);
+      if (kx || ky) {
+        var len = Math.hypot(kx, ky);
+        me.tx = me.x + (kx / len) * MAX_SPEED * dt;
+        me.ty = me.y + (ky / len) * MAX_SPEED * dt;
+      }
+      me.tx = clampField(me.tx);
+      me.ty = clampField(me.ty);
+      var dx = me.tx - me.x, dy = me.ty - me.y, dist = Math.hypot(dx, dy), step = MAX_SPEED * dt;
+      if (dist <= step) { me.x = me.tx; me.y = me.ty; }
+      else { me.x += (dx / dist) * step; me.y += (dy / dist) * step; }
+    }
+
+    function clampField(v) { return Math.max(PLAYER_R, Math.min(ARENA - PLAYER_R, v)); }
+
+    function sendPos(now) {
+      var x = Math.round(me.x), y = Math.round(me.y);
+      if (x === me.sentX && y === me.sentY) return;
+      if (now - me.sentAt < POS_SEND_MS) return;
+      Hitsumabushi.sendGameData({ type: 'POS', x: x, y: y });
+      me.sentX = x;
+      me.sentY = y;
+      me.sentAt = now;
+    }
+
+    // ドラッグした分だけ点が動く（指の下に点が隠れないように、指の位置には合わせない）
+    var dragFrom = null;
+    function canMove() {
+      return isPlayer && me && !isDead(myId) && !result && Hitsumabushi.phase !== 'over' && playTime(Date.now()) >= 0;
+    }
+    function toLogical(e) {
+      var r = canvasEl.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      return [((e.clientX - r.left) / r.width) * ARENA, ((e.clientY - r.top) / r.height) * ARENA];
+    }
+    function onPointerDown(e) {
+      unlockAudio();
+      if (!isPlayer) return;
+      var p = toLogical(e);
+      if (!p) return;
+      e.preventDefault();
+      dragFrom = p;
+      try { stageEl.setPointerCapture(e.pointerId); } catch (err) { /* マウス以外で捕捉できない環境では捕捉なしで続ける */ }
+    }
+    function onPointerMove(e) {
+      if (!dragFrom) return;
+      var p = toLogical(e);
+      if (!p) return;
+      if (canMove()) {
+        me.tx = clampField(me.tx + p[0] - dragFrom[0]);
+        me.ty = clampField(me.ty + p[1] - dragFrom[1]);
+      }
+      dragFrom = p;
+    }
+    function onPointerUp() { dragFrom = null; }
+
+    var KEY_NAMES = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, w: 1, a: 1, s: 1, d: 1 };
+    function keyName(e) { return e.key.length === 1 ? e.key.toLowerCase() : e.key; }
+    function onKeyDown(e) {
+      var k = keyName(e);
+      if (!KEY_NAMES[k]) return;
+      keys[k] = true;
+      e.preventDefault();
+    }
+    function onKeyUp(e) { keys[keyName(e)] = false; }
+
+    // ---------- CPU（進行役だけが動かす） ----------
+    // 少し先の弾の位置を見て、9方向（止まるを含む）のうち危なくない方へ動く。
+    // CPU どうしが同じ安全な場所に集まって一緒に当たらないよう、自分の席の近くを好み、
+    // ほかの点に近づきすぎないようにする。
+    function danger(id, x, y, t, live) {
+      var half = zoneHalf(t + 400) - 30;
+      var dz = Math.max(Math.abs(x - ARENA / 2), Math.abs(y - ARENA / 2)) - half;
+      var score = dz > 0 ? dz * dz * 4 : 0;
+      for (var i = 0; i < live.length; i++) {
+        for (var k = 1; k <= 3; k++) {
+          var p = bulletAt(live[i], t + k * 150), dd = Math.hypot(p[0] - x, p[1] - y) - live[i].r - PLAYER_R;
+          if (dd < 36) score += (36 - dd) * (36 - dd) / k;
+        }
+      }
+      // 自分の席の近くを少し好む（壁際は逃げ場が少ないので、席は真ん中寄りにある）
+      var home = startPos(id);
+      score += (Math.hypot(x - home[0], y - home[1]) / 300) * 20;
+      config.players.forEach(function (p) {
+        if (p.id === id || isDead(p.id)) return;
+        var o = p.id === myId && me ? me : dots[p.id];
+        var dd = Math.hypot(o.x - x, o.y - y);
+        if (dd < 50) score += (50 - dd) * (50 - dd) * 0.2;
+      });
+      return score;
+    }
+
+    function cpuStep(now, t, dt, live) {
+      Object.keys(cpu).forEach(function (id) {
+        if (isDead(id)) return;
+        var c = cpu[id], d = dots[id];
+        if (now >= c.thinkAt) {
+          c.thinkAt = now + CPU_THINK_MS;
+          var best = null;
+          for (var k = -1; k < 8; k++) {
+            var vx = k < 0 ? 0 : Math.cos((k * Math.PI) / 4), vy = k < 0 ? 0 : Math.sin((k * Math.PI) / 4);
+            var x = clampField(d.x + vx * MAX_SPEED * 200), y = clampField(d.y + vy * MAX_SPEED * 200);
+            var s = danger(id, x, y, t, live) + Math.random() * 3;
+            if (!best || s < best.s) best = { s: s, vx: vx, vy: vy };
+          }
+          c.vx = best.vx;
+          c.vy = best.vy;
+        }
+        d.x = clampField(d.x + c.vx * MAX_SPEED * dt);
+        d.y = clampField(d.y + c.vy * MAX_SPEED * dt);
+        d.tx = d.x;
+        d.ty = d.y;
+        if (isHit(d.x, d.y, t, live)) {
+          Hitsumabushi.sendGameData({ type: 'OUT', id: id, t: Math.round(t) });
+          recordDeath(id, t);
+        }
+      });
+      if (now - cpuSentAt >= POS_SEND_MS) {
+        var pos = {};
+        Object.keys(cpu).forEach(function (id) { if (!isDead(id)) pos[id] = [Math.round(dots[id].x), Math.round(dots[id].y)]; });
+        if (Object.keys(pos).length) Hitsumabushi.sendGameData({ type: 'CPOS', p: pos });
+        cpuSentAt = now;
+      }
+    }
+
+    // ---------- 音 ----------
+    var audio = null;
+    var muted = false;
+    function unlockAudio() {
+      if (audio) return;
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audio = new Ctx();
+      if (audio.state === 'suspended') audio.resume();
+    }
+    function beep(freq, ms, type, gain) {
+      if (!audio || muted) return;
+      var osc = audio.createOscillator();
+      var g = audio.createGain();
+      osc.type = type || 'square';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(gain || 0.06, audio.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + ms / 1000);
+      osc.connect(g);
+      g.connect(audio.destination);
+      osc.start();
+      osc.stop(audio.currentTime + ms / 1000);
+    }
+    function countdownBeep(now) {
+      if (now >= playAt) return;
+      var sec = Math.ceil((playAt - now) / 1000);
+      if (sec === lastBeepSec) return;
+      lastBeepSec = sec;
+      beep(440, 90);
+    }
+
+    // ---------- 表示 ----------
+    var canvasEl, ctx, stageEl, promptEl, clockEl, rosterEl, bannerEl, countEl, rankingEl;
+    var side = 0;
+    var dpr = 1;
+    var rosterKey = null;
+    var rankingKey = null;
+
+    function nameOf(id) {
+      if (id === myId) return 'あなた';
+      return players[id] ? players[id].name : id;
+    }
+    function unitName(u) { return teamMode ? unitInfo[u].name : nameOf(u); }
+    function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
+    function fmtSec(ms) { return (ms / 1000).toFixed(1) + '秒'; }
+
+    function render(now, t, live) {
+      if (!config) return;
+      if (t === undefined) t = playTime(now);
+      renderHud(now, t);
+      renderRoster();
+      renderRanking();
+      draw(t, live || (t >= 0 ? liveBullets(t) : []));
+    }
+
+    function renderHud(now, t) {
+      var text;
+      if (result) text = '決着！';
+      else if (t < 0) text = 'まもなくスタート';
+      else if (isPlayer && isDead(myId)) text = '脱落… みんなを見守ろう';
+      else if (isPlayer) text = '弾をよけて生き残れ！';
+      else text = '観戦中';
+      setText(promptEl, text);
+      var shown = Math.max(0, Math.min(ZONE_END, result ? lastTime() : t));
+      setText(clockEl, fmtSec(shown));
+      clockEl.classList.toggle('danger', !result && t >= ZONE_START);
+
+      setText(countEl, t < 0 ? String(Math.ceil(-t / 1000)) : '');
+      var banner;
+      if (result) banner = '🏆 ' + unitName(result.ranking[0]) + (!teamMode && result.ranking[0] === myId ? 'の勝ち！' : ' の勝ち！');
+      else if (t < 0) banner = isPlayer ? 'ドラッグで動かして弾をよけよう' : '';
+      else if (t >= ZONE_START) banner = '壁が迫ってくる！';
+      else banner = '';
+      setText(bannerEl, banner);
+      document.body.classList.toggle('playing', canMove());
+      document.body.classList.toggle('dragging', canMove() && !!dragFrom);
+    }
+
+    // 決着した時点の経過時間（最後に脱落した人の時刻。生き残りがいればその時点）
+    function lastTime() {
+      var m = 0;
+      Object.keys(deaths).forEach(function (id) { m = Math.max(m, deaths[id]); });
+      return m;
+    }
+
+    function renderRoster() {
+      var key = JSON.stringify([deaths, result && result.ranking]);
+      if (key === rosterKey) return;
+      rosterKey = key;
+      rosterEl.innerHTML = '';
+      config.players.forEach(function (p) {
+        var u = unitOf(p.id);
+        var chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.setAttribute('data-player', p.id);
+        var dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = unitInfo[u].color;
+        var name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = nameOf(p.id);
+        var state = document.createElement('span');
+        state.className = 'state';
+        if (result) {
+          var rank = result.ranking.indexOf(u) + 1;
+          state.textContent = rank + '位';
+          chip.className += rank === 1 ? ' winner' : ' out';
+        } else if (isDead(p.id)) {
+          chip.className += ' out';
+          state.textContent = fmtSec(deaths[p.id]);
+        } else {
+          chip.className += ' alive';
+          state.textContent = teamMode ? unitInfo[u].name : '生存';
+        }
+        chip.appendChild(dot);
+        chip.appendChild(name);
+        chip.appendChild(state);
+        rosterEl.appendChild(chip);
+      });
+    }
+
+    function renderRanking() {
+      var key = result ? result.ranking.join(',') : '';
+      if (key === rankingKey) return;
+      rankingKey = key;
+      rankingEl.classList.toggle('hidden', !result);
+      rankingEl.innerHTML = '';
+      if (!result) return;
+      result.ranking.forEach(function (u, i) {
+        var row = document.createElement('div');
+        row.className = 'rank-row' + (i === 0 ? ' first' : '');
+        row.setAttribute('data-unit', u);
+        var time = result.times[u];
+        [
+          ['pos', (i + 1) + '位'],
+          ['name', unitName(u)],
+          ['detail', time === null ? '生き残り' : fmtSec(time)]
+        ].forEach(function (cell) {
+          var span = document.createElement('span');
+          span.className = cell[0];
+          span.textContent = cell[1];
+          row.appendChild(span);
+        });
+        rankingEl.appendChild(row);
+      });
+    }
+
+    // ---------- canvas ----------
+    function fitCanvas() {
+      var w = stageEl.clientWidth, h = stageEl.clientHeight;
+      if (!w || !h) return;     // 初期化直後や非表示の間は 0 になる
+      var s = Math.floor(Math.min(w, h) - 8);
+      if (s <= 0 || s === side) return;
+      side = s;
+      dpr = window.devicePixelRatio || 1;
+      canvasEl.style.width = side + 'px';
+      canvasEl.style.height = side + 'px';
+      canvasEl.width = Math.round(side * dpr);
+      canvasEl.height = Math.round(side * dpr);
+    }
+
+    function hexAlpha(color, alpha) {
+      var r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+
+    function draw(t, live) {
+      if (!ctx || !side || !config) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      var k = (side * dpr) / ARENA;
+      ctx.setTransform(k, 0, 0, k, 0, 0);
+
+      // 目盛り
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.07)';
+      ctx.lineWidth = 1;
+      for (var g = 50; g < ARENA; g += 50) {
+        ctx.beginPath();
+        ctx.moveTo(g, 0); ctx.lineTo(g, ARENA);
+        ctx.moveTo(0, g); ctx.lineTo(ARENA, g);
+        ctx.stroke();
+      }
+
+      // 迫ってくる壁
+      var half = zoneHalf(Math.max(0, t));
+      if (half < ARENA / 2) {
+        ctx.fillStyle = 'rgba(255, 59, 92, 0.25)';
+        var lo = ARENA / 2 - half, hi = ARENA / 2 + half;
+        ctx.fillRect(0, 0, ARENA, lo);
+        ctx.fillRect(0, hi, ARENA, ARENA - hi);
+        ctx.fillRect(0, lo, lo, hi - lo);
+        ctx.fillRect(hi, lo, ARENA - hi, hi - lo);
+        ctx.strokeStyle = '#ff3b5c';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(lo, lo, hi - lo, hi - lo);
+      }
+
+      // 弾（光は太い半透明の円で描く。影のぼかしは弾が多いと重い）
+      if (!result) {
+        live.forEach(function (b) {
+          var p = bulletAt(b, t);
+          ctx.fillStyle = hexAlpha(BULLET_COLOR, 0.25);
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], b.r + 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = BULLET_COLOR;
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], b.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], b.r * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      // プレイヤー（自分はいちばん上に描く）
+      config.players.forEach(function (p) {
+        if (p.id === myId || isDead(p.id)) return;
+        var d = dots[p.id];
+        d.x += (d.tx - d.x) * 0.35;
+        d.y += (d.ty - d.y) * 0.35;
+        drawDot(p.id, d.x, d.y, false);
+      });
+      if (isPlayer && me && !isDead(myId)) drawDot(myId, me.x, me.y, true);
+
+      // 外枠
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.6)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, ARENA - 2, ARENA - 2);
+    }
+
+    // プレイヤーはネオン・パーティーサッカーと同じ 14×14 のドット絵のゴースト（1=本体の色, 2=ハイライト）。
+    // 2枚を交互に描いて揺らし、目は向いている方へ寄せる。
+    var GHOST_MASK_1 = [
+      [0,0,0,0,0,1,1,1,1,0,0,0,0,0],
+      [0,0,0,1,1,1,1,1,1,1,1,0,0,0],
+      [0,0,1,1,2,2,1,1,1,1,1,1,0,0],
+      [0,1,1,2,2,1,1,1,1,1,1,1,1,0],
+      [0,1,1,2,1,1,1,1,1,1,1,1,1,0],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,0,1,1,1,0,0,1,1,1,0,1,1],
+      [1,0,0,0,1,1,0,0,1,1,0,0,0,1]
+    ];
+    var GHOST_MASK_2 = [
+      [0,0,0,0,0,1,1,1,1,0,0,0,0,0],
+      [0,0,0,1,1,1,1,1,1,1,1,0,0,0],
+      [0,0,1,1,2,2,1,1,1,1,1,1,0,0],
+      [0,1,1,2,2,1,1,1,1,1,1,1,1,0],
+      [0,1,1,2,1,1,1,1,1,1,1,1,1,0],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [0,1,1,1,0,1,1,1,1,0,1,1,1,0],
+      [0,0,1,0,0,0,1,1,0,0,0,1,0,0]
+    ];
+    // 1ドットの大きさ。ゴーストの幅は 14 × 1.5 = 21 で、当たり判定（半径 PLAYER_R）より少しだけ大きい
+    var GHOST_PIX = 1.5;
+
+    var facing = {};            // id -> { x, y, dx, dy }（前に描いた位置と、向いている向き）
+
+    // 前に描いた位置から動いた向きを、向いている向きにする（止まっている間は前の向きのまま）
+    function faceOf(id, x, y) {
+      var f = facing[id];
+      if (!f) f = facing[id] = { x: x, y: y, dx: 0, dy: 1 };
+      var mx = x - f.x, my = y - f.y, len = Math.hypot(mx, my);
+      if (len > 0.3) { f.dx = mx / len; f.dy = my / len; }
+      f.x = x;
+      f.y = y;
+      return f;
+    }
+
+    function mixWhite(color, k) {
+      var c = [1, 3, 5].map(function (i) { return Math.round(parseInt(color.slice(i, i + 2), 16) * (1 - k) + 255 * k); });
+      return 'rgb(' + c.join(',') + ')';
+    }
+
+    function drawGhost(x, y, dirX, dirY, mainColor, coreColor, animSec) {
+      ctx.save();
+      ctx.shadowColor = mainColor;
+      ctx.shadowBlur = 10;
+      var mask = Math.floor(animSec * 8) % 2 === 0 ? GHOST_MASK_1 : GHOST_MASK_2;
+      var pix = GHOST_PIX, size = 14 * pix, sx = x - size / 2, sy = y - size / 2;
+      for (var r = 0; r < 14; r++) {
+        for (var c = 0; c < 14; c++) {
+          var v = mask[r][c];
+          if (!v) continue;
+          ctx.fillStyle = v === 2 ? coreColor : mainColor;
+          ctx.fillRect(sx + c * pix, sy + r * pix, pix + 0.05, pix + 0.05);
+        }
+      }
+      ctx.shadowBlur = 0;
+      var ox = dirX > 0.25 ? 1 : dirX < -0.25 ? -1 : 0;
+      var oy = dirY > 0.35 ? 1 : dirY < -0.35 ? -1 : 0;
+      [3, 8].forEach(function (col) {
+        var ex = sx + (col + ox) * pix, ey = sy + (4 + oy) * pix;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(ex, ey, pix * 3, pix * 4);
+        ctx.fillStyle = '#090d1a';
+        var px = ex + (dirX >= 0 ? pix : 0);
+        var py = ey + (dirY > 0.35 ? pix * 1.6 : dirY < -0.35 ? pix * 0.3 : pix);
+        ctx.fillRect(px, py, pix * 1.8, pix * 2);
+      });
+      ctx.restore();
+    }
+
+    function drawDot(id, x, y, mine) {
+      var color = unitInfo[unitOf(id)].color;
+      var f = faceOf(id, x, y);
+      // 揺れる周期を人ごとにずらす
+      drawGhost(x, y, f.dx, f.dy, color, mixWhite(color, 0.8), Date.now() / 1000 + players[id].seat * 0.37);
+      var labelY = y - 14 * GHOST_PIX / 2 - 4;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      if (mine) {
+        // 自分の目印（ネオン・パーティーサッカーと同じ、頭の上の ▼）
+        ctx.font = 'bold 12px "Segoe UI", sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('▼', x, labelY);
+        labelY -= 12;
+      }
+      ctx.font = 'bold 13px "Segoe UI", sans-serif';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(10, 11, 16, 0.85)';
+      ctx.strokeText(nameOf(id), x, labelY);
+      ctx.fillStyle = color;
+      ctx.fillText(nameOf(id), x, labelY);
+    }
+
+    function applyObsMode(isObs) {
+      document.body.classList.toggle('transparent', isObs);
+    }
+
+    Hitsumabushi.init({
+      onCreateMatch: function () {
+        canvasEl = document.getElementById('field');
+        ctx = canvasEl.getContext('2d');
+        stageEl = document.getElementById('stage');
+        promptEl = document.getElementById('prompt');
+        clockEl = document.getElementById('clock');
+        rosterEl = document.getElementById('roster');
+        bannerEl = document.getElementById('banner');
+        countEl = document.getElementById('count');
+        rankingEl = document.getElementById('ranking');
+
+        // ドラッグした分だけ動かすので、フィールドの外（縦長の画面の上下の余白）から始めてもよい
+        stageEl.addEventListener('pointerdown', onPointerDown);
+        stageEl.addEventListener('pointermove', onPointerMove);
+        stageEl.addEventListener('pointerup', onPointerUp);
+        stageEl.addEventListener('pointercancel', onPointerUp);
+        // ドラッグで画面がスクロール・ズームしないようにする
+        stageEl.addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
+        stageEl.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+        window.addEventListener('blur', function () { keys = {}; });
+        document.addEventListener('pointerdown', unlockAudio);
+        var muteBtn = document.getElementById('muteBtn');
+        muteBtn.addEventListener('click', function () {
+          unlockAudio();
+          muted = !muted;
+          muteBtn.textContent = muted ? '🔇' : '🔊';
+        });
+
+        new ResizeObserver(fitCanvas).observe(stageEl);
+      },
+
+      onStartMatch: function (cfg) {
+        config = cfg;
+        myId = cfg.localPlayerId;
+        document.body.classList.toggle('spectating', Hitsumabushi.isSpectator());
+        applyObsMode(cfg.isObsMode);
+
+        teamMode = cfg.players.some(function (p) { return !!p.teamId; });
+        players = {};
+        units = [];
+        unitInfo = {};
+        cfg.players.forEach(function (p, i) {
+          var u = teamMode ? p.teamId : p.id;
+          players[p.id] = { name: p.name, unit: u, isCpu: !!p.isCpu, seat: i };
+          if (!unitInfo[u]) {
+            unitInfo[u] = { name: teamMode ? p.teamName : p.name, color: PALETTE[units.length % PALETTE.length], members: [] };
+            units.push(u);
+          }
+          unitInfo[u].members.push(p.id);
+        });
+        // 着席していない部屋の作成者は観戦者ではないが、よける人でもない
+        isPlayer = myId !== null && !Hitsumabushi.isSpectator() && !!players[myId];
+
+        schedule = makeSchedule(String(cfg.seriesId) + ':' + cfg.matchNumber);
+        playAt = Date.now() + INTRO_MS;
+        dots = {};
+        cfg.players.forEach(function (p) {
+          var s = startPos(p.id);
+          dots[p.id] = { x: s[0], y: s[1], tx: s[0], ty: s[1] };
+        });
+        // 最初の位置は全員が席から計算できるので、動くまでは送らない
+        me = isPlayer ? {
+          x: dots[myId].x, y: dots[myId].y, tx: dots[myId].x, ty: dots[myId].y,
+          sentX: Math.round(dots[myId].x), sentY: Math.round(dots[myId].y), sentAt: 0
+        } : null;
+        deaths = {};
+        result = null;
+        resultAt = 0;
+        overSent = false;
+        keys = {};
+        dragFrom = null;
+        facing = {};
+        lastFrameAt = 0;
+        lastBeepSec = -1;
+        rosterKey = null;
+        rankingKey = null;
+        cpu = null;
+        cpuSentAt = 0;
+        if (Hitsumabushi.isGameMaster()) {
+          cpu = {};
+          cfg.players.forEach(function (p) { if (p.isCpu) cpu[p.id] = { vx: 0, vy: 0, thinkAt: 0 }; });
+          // 途中参加者が弾の時刻を合わせられるよう、弾が出始める時刻（進行役の時計）を登録する。
+          // 端末の時計のずれの分だけ弾の位置がずれて見えるが、当たり判定は各自の画面で行うので勝敗には響かない。
+          Hitsumabushi.setMatchState({ playWall: playAt, deaths: deaths });
+        }
+        if (ticker) clearInterval(ticker);
+        ticker = setInterval(tick, 16);
+        render(Date.now());
+      },
+
+      onMatchState: function (state) {
+        if (!state) return;
+        if (typeof state.playWall === 'number') playAt = state.playWall;
+        Object.keys(state.deaths || {}).forEach(function (id) {
+          if (players[id] && !isDead(id)) deaths[id] = state.deaths[id];
+        });
+        if (state.result) result = state.result;
+        render(Date.now());
+      },
+
+      onGameData: function (payload, senderId) {
+        if (Hitsumabushi.phase === 'over' || !payload || !config) return;
+        var fromGm = senderId === config.gameMasterId;
+        if (payload.type === 'POS') {
+          if (!players[senderId] || senderId === myId) return;
+          var x = Number(payload.x), y = Number(payload.y);
+          if (!isFinite(x) || !isFinite(y)) return;
+          dots[senderId].tx = clampField(x);
+          dots[senderId].ty = clampField(y);
+        } else if (payload.type === 'CPOS' && fromGm && payload.p) {
+          Object.keys(payload.p).forEach(function (id) {
+            var v = payload.p[id];
+            if (!players[id] || !players[id].isCpu || !Array.isArray(v)) return;
+            dots[id].tx = clampField(Number(v[0]) || 0);
+            dots[id].ty = clampField(Number(v[1]) || 0);
+          });
+        } else if (payload.type === 'OUT') {
+          // CPU の脱落は進行役が id を付けて送る。人は自分の脱落だけを送れる。
+          var id = payload.id !== undefined ? payload.id : senderId;
+          if (payload.id !== undefined && !(fromGm && players[id] && players[id].isCpu)) return;
+          var t = Number(payload.t);
+          if (!isFinite(t)) return;
+          recordDeath(id, t);
+        } else if (payload.type === 'RESULT' && fromGm && !result && Array.isArray(payload.ranking)) {
+          Object.keys(payload.deaths || {}).forEach(function (pid) {
+            if (players[pid] && !isDead(pid)) deaths[pid] = payload.deaths[pid];
+          });
+          applyResult({ ranking: payload.ranking, times: payload.times || {} }, Date.now());
+        }
+      },
+
+      onError: function (code, detail) {
+        console.error('[neon-dodge-survival]', code, detail && detail.message);
+      }
+    });
+  </script>
+</body>
+</html>
