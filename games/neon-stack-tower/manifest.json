@@ -1,0 +1,21 @@
+{
+  "$schema": "https://milightpartner.jp/schemas/game-manifest-1.json",
+  "gameId": "neon-stack-tower",
+  "title": "ネオン・スタックタワー",
+  "version": "1.0.0",
+  "players": {
+    "min": 2,
+    "max": 8,
+    "type": "variable",
+    "allowCpuFill": true
+  },
+  "teamBattle": {
+    "supported": true,
+    "mode": "both"
+  },
+  "creator": "milightpartner",
+  "resultModel": {
+    "type": "ranked",
+    "allowTie": false
+  }
+}

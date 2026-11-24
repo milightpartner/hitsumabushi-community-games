@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ネオン・スタックタワー</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      background-color: #0a0b10;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 8px;
+      transition: background-color 0.3s;
+    }
+
+    body.transparent { background-color: transparent !important; }
+    :root:has(body.transparent) { background-color: transparent !important; }
+
+    #app {
+      width: 100%;
+      max-width: 820px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .card {
+      background: rgba(22, 26, 42, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    }
+
+    /* 上部HUD: タイトル・手番・残り時間 */
+    .hud {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px 4px 12px;
+      min-height: 52px;
+    }
+    .hud-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .hud-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .hud-title { color: #00f0ff; font-weight: bold; font-size: 0.75rem; letter-spacing: 1px; white-space: nowrap; }
+    .prompt {
+      flex: 1;
+      min-width: 0;
+      font-weight: bold;
+      font-size: 1rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .prompt.mine { color: #ffe600; }
+    .timer { display: flex; align-items: center; gap: 8px; }
+    .timer-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(148, 163, 184, 0.2); overflow: hidden; }
+    .timer-fill { height: 100%; width: 100%; background: #39ff14; }
+    .timer-fill.low { background: #ff3b5c; }
+    .timer-text { font-size: 0.75rem; color: #94a3b8; min-width: 4.5em; text-align: right; white-space: nowrap; }
+    .spectator-badge {
+      display: none;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.12);
+      border: 1px solid #ffe600;
+      color: #ffe600;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    .mute-btn {
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      background: rgba(0, 240, 255, 0.08);
+      color: #fff;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    /* 参加者 */
+    .roster { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      flex: 1 1 22%;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(22, 26, 42, 0.85);
+      font-size: 0.8rem;
+    }
+    .chip .dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+    .chip .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip .state { font-size: 0.7rem; color: #94a3b8; white-space: nowrap; }
+    .chip.focus { border-color: #ffe600; box-shadow: 0 0 10px rgba(255, 230, 0, 0.45); }
+    .chip.focus .state { color: #ffe600; font-weight: bold; }
+    .chip.out { opacity: 0.45; }
+    .chip.out .name { text-decoration: line-through; }
+    .chip.winner { border-color: #ffe600; background: rgba(255, 230, 0, 0.12); }
+    .chip.winner .state { color: #ffe600; font-weight: bold; }
+
+    /* タワー */
+    .stage {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #tower {
+      display: block;
+      touch-action: none;
+    }
+    body.my-turn #tower { cursor: grab; }
+    body.my-turn.dragging #tower { cursor: grabbing; }
+    body.spectating .stage { pointer-events: none; }
+    .banner {
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 94%;
+      padding: 4px 14px;
+      border-radius: 999px;
+      background: rgba(10, 11, 16, 0.8);
+      border: 1px solid rgba(0, 240, 255, 0.5);
+      font-weight: bold;
+      font-size: 0.95rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+    .banner:empty { display: none; }
+    .stamp {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-6deg);
+      max-width: 94%;
+      padding: 8px 18px;
+      border-radius: 10px;
+      border: 2px solid #ff007f;
+      background: rgba(10, 11, 16, 0.85);
+      color: #ff007f;
+      text-align: center;
+      text-shadow: 0 0 10px rgba(255, 0, 127, 0.7);
+      pointer-events: none;
+      animation: stamp-in 0.35s ease-out;
+    }
+    .stamp:empty { display: none; }
+    .stamp .title { display: block; font-size: 1.6rem; font-weight: bold; letter-spacing: 2px; }
+    .stamp .sub { display: block; font-size: 0.85rem; color: #fff; text-shadow: none; }
+    @keyframes stamp-in {
+      0% { opacity: 0; transform: translate(-50%, -50%) rotate(-6deg) scale(1.8); }
+      100% { opacity: 1; transform: translate(-50%, -50%) rotate(-6deg) scale(1); }
+    }
+
+    /* 操作 */
+    .controls {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px;
+    }
+    .info { flex: 1; min-width: 0; font-size: 0.8rem; color: #94a3b8; padding-left: 6px; }
+    .info b { color: #fff; }
+    .btn {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 8px 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 240, 255, 0.5);
+      background: rgba(0, 240, 255, 0.08);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.35; cursor: default; }
+    .btn.drop { border-color: #39ff14; background: rgba(57, 255, 20, 0.15); color: #39ff14; min-width: 96px; }
+    .controls.hidden { display: none; }
+
+    /* 最終結果 */
+    .ranking { flex-shrink: 0; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+    .ranking.hidden { display: none; }
+    .rank-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; min-width: 0; }
+    .rank-row .pos { width: 2.4em; color: #94a3b8; font-weight: bold; flex-shrink: 0; }
+    .rank-row .name { flex: 1; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-row .detail { color: #94a3b8; font-size: 0.75rem; white-space: nowrap; }
+    .rank-row.first .pos, .rank-row.first .detail { color: #ffe600; }
+
+    @media (max-width: 640px), (max-height: 560px) {
+      .hud-title { display: none; }
+      .prompt { font-size: 0.9rem; }
+      .chip { flex-basis: 40%; padding: 3px 6px; }
+      .info { font-size: 0.72rem; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="hud card">
+      <div class="hud-main">
+        <div class="hud-row">
+          <span class="hud-title">STACK TOWER</span>
+          <span class="prompt" id="prompt">接続中...</span>
+          <span class="spectator-badge">👀 観戦中</span>
+        </div>
+        <div class="timer">
+          <div class="timer-bar"><div class="timer-fill" id="timerFill"></div></div>
+          <span class="timer-text" id="timerText"></span>
+        </div>
+      </div>
+      <button class="mute-btn" id="muteBtn" aria-label="音のオン・オフ">🔊</button>
+    </div>
+
+    <div class="roster" id="roster"></div>
+
+    <div class="stage card" id="stage">
+      <canvas id="tower" width="0" height="0"></canvas>
+      <div class="banner" id="banner"></div>
+      <div class="stamp" id="stamp"></div>
+    </div>
+
+    <div class="controls card" id="controls">
+      <div class="info" id="info"></div>
+      <button class="btn" id="rotLBtn" title="左に回す" aria-label="左に回す">↺</button>
+      <button class="btn" id="rotRBtn" title="右に回す" aria-label="右に回す">↻</button>
+      <button class="btn drop" id="dropBtn">落とす</button>
+    </div>
+
+    <div class="ranking card hidden" id="ranking"></div>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/0.28.0/hitsumabushi-sdk.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
+  <script>
+    // ---------- ルール ----------
+    var INTRO_MS = 2000;        // 試合開始から最初の手番まで
+    var AIM_MS = 8000;          // 1手の持ち時間。過ぎたらその時点の位置で落とす
+    // 進行役が、手番の人の最後の操作を待つ猶予（届くまでの遅れの分）
+    var AIM_GRACE_MS = 300;
+    var MIN_FALL_MS = 500;      // 落としてから、止まったとみなすまでの最短の時間
+    var MAX_FALL_MS = 6000;     // 揺れ続けても、ここで止まったとみなす
+    var CALM_STEPS = 24;        // 全部のブロックがこの回数続けて静かなら、止まったとみなす
+    var OUT_MS = 1800;          // 脱落を見せてから次の手番まで
+    var OVER_MS = 2000;         // 決着を見せてから結果を報告するまで
+    var SEND_MS = 50;           // 状態を配る間隔の下限（20回/秒）
+    var HEARTBEAT_MS = 1000;    // 何も変わらなくても状態を配る間隔
+    var AIM_SEND_MS = 70;       // 手番の人が位置を送る間隔の下限
+
+    // 論理座標（幅 W・高さ H の画面。y は下向き）
+    var W = 600;
+    var H = 760;
+    var PLATFORM_TOP = 620;     // 土台の上面
+    var PLATFORM_W = 280;
+    var PLATFORM_H = 24;
+    var FALL_Y = PLATFORM_TOP + 60;    // 重心がここより下に行ったブロックは、土台から落ちた
+    var REMOVE_Y = PLATFORM_TOP + 1200;
+    var AIM_MIN = 40;
+    var AIM_MAX = W - 40;
+    var ANGLE_STEPS = 24;       // 1回の回転は 360/24 = 15°
+    var MOVE_STEP = 10;         // キーボードの←→で動く量
+    var STEP_MS = 1000 / 60;    // 物理演算の1ステップ
+    // 照準は、タワーのいちばん上からこれだけ上に出す（ブロックの大きさの分はさらに上）
+    var DROP_GAP = 150;
+    // 落としたブロックが最初に何かに触れるまでの、落ちる速さの上限（px / ステップ）。
+    // 照準を高くしたのは見やすさのためで、高く落とすほど強くぶつかって崩れやすくならないようにする。
+    // 6 は、約 60px の高さから落としたときの速さ。
+    var MAX_DROP_SPEED = 6;
+    var INTRO_DY = PLATFORM_TOP - DROP_GAP - 60;  // 最初の手番が始まるまでの、照準の高さ（カメラの位置の基準）
+
+    // 手番が進むほどブロックが大きくなる
+    function scaleOf(n) { return Math.min(1.6, Math.round((1 + 0.03 * (n - 1)) * 100) / 100); }
+
+    // ---------- ブロックの形 ----------
+    // 形は手番ごとに進行役がその場で作る。どの形も上面が平らにならないようにして、
+    // 真ん中に置き続けるだけでは積み上がらないようにする。
+    // 形は凸多角形（パーツ）の集まりで表す。物理エンジンは凹んだ多角形をそのまま扱えないので、
+    // L字などは長方形をつなげて作る。座標は重心を原点にした相対座標（y は下向き）。
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function rectAt(x0, y0, x1, y1) { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
+
+    // 点の集まりを囲む凸多角形
+    function hull(points) {
+      var p = points.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+      function cross(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+      var lower = [], upper = [];
+      p.forEach(function (q) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop();
+        lower.push(q);
+      });
+      p.slice().reverse().forEach(function (q) {
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop();
+        upper.push(q);
+      });
+      return lower.slice(0, -1).concat(upper.slice(0, -1));
+    }
+
+    var MAKERS = [
+      // ゴツゴツした岩（3回に1回くらい出る）
+      { weight: 3, make: function () {
+        var n = 5 + Math.floor(rnd(0, 4)), r = rnd(40, 60), sx = rnd(1, 1.7), pts = [];
+        for (var i = 0; i < n; i++) {
+          var a = ((i + rnd(-0.3, 0.3)) * Math.PI * 2) / n, d = r * rnd(0.55, 1);
+          pts.push([Math.cos(a) * d * sx, Math.sin(a) * d]);
+        }
+        return [hull(pts)];
+      } },
+      // かけら（いびつな四角形）
+      { weight: 1, make: function () {
+        var w = rnd(90, 150), h = rnd(40, 70);
+        return [hull([[-w / 2, h / 2], [w / 2, (h / 2) * rnd(-0.6, 1)], [(w / 2) * rnd(-0.2, 1), -h / 2], [-w / 2, (-h / 2) * rnd(0, 1)]])];
+      } },
+      // 上面が大きく傾いた板
+      { weight: 1, make: function () {
+        var w = rnd(110, 170), hl = rnd(10, 22), hr = rnd(40, 65);
+        return [[[-w / 2, 0], [w / 2, 0], [w / 2, -hr], [-w / 2, -hl]]];
+      } },
+      // L字
+      { weight: 1, make: function () {
+        var t = rnd(26, 40), v = rnd(70, 120), h = rnd(70, 120);
+        return [rectAt(0, -v, t, 0), rectAt(t, -t, h, 0)];
+      } },
+      // T字
+      { weight: 1, make: function () {
+        var bw = rnd(110, 170), bh = rnd(22, 32), sw = rnd(26, 40), sh = rnd(40, 80);
+        return [rectAt(-bw / 2, -sh - bh, bw / 2, -sh), rectAt(-sw / 2, -sh, sw / 2, 0)];
+      } },
+      // 段々
+      { weight: 1, make: function () {
+        var sw = rnd(30, 45), step = rnd(18, 28), parts = [];
+        for (var i = 0; i < 3; i++) parts.push(rectAt(i * sw, -(i + 1) * step, (i + 1) * sw, 0));
+        return parts;
+      } },
+      // U字
+      { weight: 1, make: function () {
+        var w = rnd(100, 150), h = rnd(20, 28), pw = rnd(18, 26), ph = rnd(30, 55);
+        return [rectAt(-w / 2, -h, w / 2, 0), rectAt(-w / 2, -h - ph, -w / 2 + pw, -h), rectAt(w / 2 - pw, -h - ph, w / 2, -h)];
+      } },
+      // Z字
+      { weight: 1, make: function () {
+        var w1 = rnd(60, 90), w2 = rnd(60, 90), h = rnd(24, 34), ov = rnd(15, 30);
+        return [rectAt(0, -h, w1, 0), rectAt(w1 - ov, -2 * h, w1 - ov + w2, -h)];
+      } }
+    ];
+
+    function polygonArea(poly) {
+      var a = 0;
+      for (var i = 0; i < poly.length; i++) {
+        var p = poly[i], q = poly[(i + 1) % poly.length];
+        a += p[0] * q[1] - q[0] * p[1];
+      }
+      return a / 2;
+    }
+    function polygonCentroid(poly) {
+      var a = polygonArea(poly), cx = 0, cy = 0;
+      for (var i = 0; i < poly.length; i++) {
+        var p = poly[i], q = poly[(i + 1) % poly.length], c = p[0] * q[1] - q[0] * p[1];
+        cx += (p[0] + q[0]) * c;
+        cy += (p[1] + q[1]) * c;
+      }
+      return [cx / (6 * a), cy / (6 * a)];
+    }
+
+    // 形を1つ作る。大きさ s を掛け、左右をランダムに反転し、重心を原点に移す。
+    function makeShape(s) {
+      var total = 0;
+      MAKERS.forEach(function (m) { total += m.weight; });
+      var pick = Math.random() * total, maker = MAKERS[0];
+      for (var i = 0; i < MAKERS.length; i++) {
+        pick -= MAKERS[i].weight;
+        if (pick < 0) { maker = MAKERS[i]; break; }
+      }
+      var flip = Math.random() < 0.5 ? -1 : 1;
+      var parts = maker.make().map(function (poly) {
+        return poly.map(function (p) { return [p[0] * s * flip, p[1] * s]; });
+      });
+      var area = 0, cx = 0, cy = 0;
+      parts.forEach(function (poly) {
+        var a = Math.abs(polygonArea(poly)), c = polygonCentroid(poly);
+        area += a;
+        cx += c[0] * a;
+        cy += c[1] * a;
+      });
+      cx /= area;
+      cy /= area;
+      return parts.map(function (poly) {
+        return poly.map(function (p) { return [Math.round((p[0] - cx) * 10) / 10, Math.round((p[1] - cy) * 10) / 10]; });
+      });
+    }
+
+    function shapeRadius(parts) {
+      var r = 0;
+      parts.forEach(function (poly) { poly.forEach(function (p) { r = Math.max(r, Math.hypot(p[0], p[1])); }); });
+      return r;
+    }
+
+    // 角度 a（ANGLE_STEPS 刻み）に回したときの、形の高さ
+    function shapeHeightAt(parts, a) {
+      var th = (a * Math.PI * 2) / ANGLE_STEPS, c = Math.cos(th), sn = Math.sin(th), lo = Infinity, hi = -Infinity;
+      parts.forEach(function (poly) {
+        poly.forEach(function (p) {
+          var y = p[0] * sn + p[1] * c;
+          lo = Math.min(lo, y);
+          hi = Math.max(hi, y);
+        });
+      });
+      return hi - lo;
+    }
+
+    var PALETTE = ['#00f0ff', '#ff007f', '#ffe600', '#39ff14', '#a855f7', '#ff8a00', '#3b82f6', '#f472b6'];
+
+    // ---------- 試合の状態（全員） ----------
+    var config = null;
+    var myId = null;
+    var isPlayer = false;
+    var teamMode = false;
+    var players = {};           // id -> { name, unit, isCpu }
+    var units = [];             // 勝ち負けの単位（個人戦はプレイヤーID、チーム戦は teamId）。席の順
+    var unitInfo = {};          // unit -> { name, color, members }
+
+    var view = null;            // 進行役から届いた最新の状態
+    var viewAt = 0;             // それを受け取った時刻（このクライアントの時計）
+    var snaps = null;           // 進行役以外: 補間用 { prev, curr }
+    var myAim = null;           // 自分の手番の照準 { n, x, a, dropped, sentX, sentA, sentAt }
+    var shapeTable = {};        // 手番の番号（= ブロックのID）-> 形
+    var seenOut = 0;            // 脱落の効果音を鳴らした人数
+    var cam = null;             // 画面の上端の y（論理座標）。null はまだ映していない
+    var lastBeepSec = -1;
+    var ticker = null;
+
+    // ---------- 進行役だけが持つ状態 ----------
+    var gm = null;
+
+    function unitOf(id) { return players[id] ? players[id].unit : null; }
+
+    // 手番の順。チーム戦はチームを交互に回す。連戦では先頭を1人ずつずらす。
+    function makeTurnOrder() {
+      var ids;
+      if (teamMode) {
+        ids = [];
+        var longest = 0;
+        units.forEach(function (u) { longest = Math.max(longest, unitInfo[u].members.length); });
+        for (var r = 0; r < longest; r++) {
+          units.forEach(function (u) { if (unitInfo[u].members[r]) ids.push(unitInfo[u].members[r]); });
+        }
+      } else {
+        ids = units.slice();
+      }
+      var shift = (config.matchNumber - 1) % ids.length;
+      return ids.slice(shift).concat(ids.slice(0, shift));
+    }
+
+    function gmCreate() {
+      var M = window.Matter;
+      var engine = M.Engine.create({ positionIterations: 10, velocityIterations: 10 });
+      engine.gravity.y = 1;
+      var platform = M.Bodies.rectangle(W / 2, PLATFORM_TOP + PLATFORM_H / 2, PLATFORM_W, PLATFORM_H, {
+        isStatic: true, friction: 1, frictionStatic: 2
+      });
+      M.Composite.add(engine.world, platform);
+      M.Events.on(engine, 'collisionStart', function (e) {
+        var f = gm && gm.fall;
+        if (!f || f.touched) return;
+        e.pairs.forEach(function (pair) {
+          if (pair.bodyA.parent === f.body || pair.bodyB.parent === f.body) f.touched = true;
+        });
+      });
+      var now = Date.now();
+      gm = {
+        engine: engine,
+        shapes: {},             // 手番の番号 -> その手番のブロックの形（ブロックのIDも手番の番号）
+        order: makeTurnOrder(),
+        ptr: 0,
+        alive: units.slice(),
+        out: [],
+        lost: null,
+        ph: 'intro',
+        phaseEnds: now + INTRO_MS,
+        n: 0,
+        pid: null,
+        sh: null,
+        dy: INTRO_DY,
+        ax: W / 2,
+        aa: 0,
+        turnEnds: 0,
+        cpu: null,
+        fall: null,
+        res: null,
+        overSent: false,
+        sentAt: 0,
+        dirty: true
+      };
+    }
+
+    function gmBodies() {
+      return window.Matter.Composite.allBodies(gm.engine.world).filter(function (b) { return !b.isStatic; });
+    }
+
+    function towerTopOf(list) {
+      var top = PLATFORM_TOP;
+      list.forEach(function (b) { if (b.y <= FALL_Y) top = Math.min(top, b.top); });
+      return top;
+    }
+
+    function gmStartTurn(now) {
+      var order = gm.order;
+      var pid = null;
+      for (var i = 0; i < order.length; i++) {
+        var cand = order[(gm.ptr + i) % order.length];
+        if (gm.alive.indexOf(unitOf(cand)) !== -1) {
+          pid = cand;
+          gm.ptr = (gm.ptr + i + 1) % order.length;
+          break;
+        }
+      }
+      gm.n++;
+      gm.pid = pid;
+      gm.sh = makeShape(scaleOf(gm.n));
+      gm.shapes[gm.n] = gm.sh;
+      gm.dy = Math.round(towerTopOf(gmSnapshot()) - DROP_GAP - shapeRadius(gm.sh));
+      gm.ax = W / 2;
+      gm.aa = 0;
+      gm.ph = 'aim';
+      gm.lost = null;
+      gm.turnEnds = now + AIM_MS;
+      gm.cpu = players[pid].isCpu ? gmPlanCpu(now) : null;
+      gmPublish(true);
+    }
+
+    // CPU: いちばん上のブロックの真上を、少しずれて狙う。形はいちばん背が低くなる向きに回す。
+    function gmPlanCpu(now) {
+      var top = null;
+      gmSnapshot().forEach(function (b) {
+        if (b.y <= FALL_Y && (!top || b.top < top.top)) top = b;
+      });
+      var spread = (Math.random() + Math.random() + Math.random() - 1.5) * 28;
+      var target = Math.max(AIM_MIN, Math.min(AIM_MAX, Math.round((top ? top.x : W / 2) + spread)));
+      var angle = 0;
+      for (var a = 1; a < ANGLE_STEPS; a++) {
+        if (shapeHeightAt(gm.sh, a) < shapeHeightAt(gm.sh, angle) - 0.5) angle = a;
+      }
+      return {
+        target: target,
+        angle: angle,
+        moveFrom: now + 500,
+        moveTo: now + 1500,
+        dropAt: now + 1800 + Math.floor(Math.random() * 800)
+      };
+    }
+
+    function gmCpuStep(now) {
+      var c = gm.cpu;
+      if (now < c.moveFrom) return;
+      var t = Math.min(1, (now - c.moveFrom) / (c.moveTo - c.moveFrom));
+      var x = Math.round(W / 2 + (c.target - W / 2) * t);
+      var a = t >= 0.5 ? c.angle : 0;
+      if (x !== gm.ax || a !== gm.aa) { gm.ax = x; gm.aa = a; gm.dirty = true; }
+      if (now >= c.dropAt) gmDrop(c.target, c.angle, now);
+    }
+
+    function gmAim(x, a) {
+      if (gm.ph !== 'aim') return;
+      gm.ax = x;
+      gm.aa = a;
+      gm.dirty = true;
+    }
+
+    function gmDrop(x, a, now) {
+      if (gm.ph !== 'aim') return;
+      gm.ax = x;
+      gm.aa = a;
+      var M = window.Matter;
+      var opts = { friction: 0.9, frictionStatic: 2, restitution: 0, density: 0.002 };
+      // パーツを、それぞれの重心の位置に置いてからつなげる。形の座標は全体の重心が原点なので、
+      // つなげた物体の位置（重心）は (x, dy) になる。
+      var parts = gm.sh.map(function (poly) {
+        var c = polygonCentroid(poly);
+        return M.Bodies.fromVertices(x + c[0], gm.dy + c[1], [poly.map(function (p) { return { x: p[0], y: p[1] }; })], opts);
+      });
+      var body = parts.length === 1 ? parts[0] : M.Body.create(Object.assign({ parts: parts }, opts));
+      M.Body.setAngle(body, (a * Math.PI * 2) / ANGLE_STEPS);
+      body.plugin = { id: gm.n, o: units.indexOf(unitOf(gm.pid)), fallen: false };
+      M.Composite.add(gm.engine.world, body);
+      gm.ph = 'fall';
+      gm.fall = { stepAt: now, elapsed: 0, calm: 0, fell: false, body: body, touched: false };
+      gmPublish(true);
+    }
+
+    function gmPhysics(now) {
+      var M = window.Matter;
+      var f = gm.fall;
+      // タブが裏に回ってタイマーが間引かれても、遅れた分だけまとめて進める（上限つき）
+      var steps = Math.min(30, Math.floor((now - f.stepAt) / STEP_MS));
+      for (var i = 0; i < steps && gm.ph === 'fall'; i++) {
+        f.stepAt += STEP_MS;
+        f.elapsed += STEP_MS;
+        M.Engine.update(gm.engine, STEP_MS);
+        if (!f.touched && f.body.velocity.y > MAX_DROP_SPEED) {
+          M.Body.setVelocity(f.body, { x: f.body.velocity.x, y: MAX_DROP_SPEED });
+        }
+        var calm = true;
+        gmBodies().forEach(function (b) {
+          if (b.position.y > REMOVE_Y) { M.Composite.remove(gm.engine.world, b); return; }
+          if (!b.plugin.fallen && b.position.y > FALL_Y) { b.plugin.fallen = true; f.fell = true; }
+          if (!b.plugin.fallen && (b.speed > 0.15 || b.angularSpeed > 0.01)) calm = false;
+        });
+        f.calm = calm ? f.calm + 1 : 0;
+        if ((f.elapsed >= MIN_FALL_MS && f.calm >= CALM_STEPS) || f.elapsed >= MAX_FALL_MS) gmEndFall(now);
+      }
+      if (steps > 0) gm.dirty = true;
+    }
+
+    function gmEndFall(now) {
+      var M = window.Matter;
+      gmBodies().forEach(function (b) { if (b.plugin.fallen) M.Composite.remove(gm.engine.world, b); });
+      if (!gm.fall.fell) { gmStartTurn(now); return; }
+      var loser = unitOf(gm.pid);
+      gm.alive = gm.alive.filter(function (u) { return u !== loser; });
+      gm.out.push(loser);
+      gm.lost = loser;
+      if (gm.alive.length <= 1) {
+        gm.res = gm.alive.concat(gm.out.slice().reverse());
+        gm.ph = 'over';
+        gm.phaseEnds = now + OVER_MS;
+      } else {
+        gm.ph = 'out';
+        gm.phaseEnds = now + OUT_MS;
+      }
+      gmPublish(true);
+    }
+
+    function gmSnapshot() {
+      return gmBodies().map(function (b) {
+        return {
+          id: b.plugin.id, o: b.plugin.o,
+          x: b.position.x, y: b.position.y, a: b.angle, top: b.bounds.min.y
+        };
+      });
+    }
+
+    // 状態。いまの手番のブロックの形（sh）は毎回入れる。積まれたブロックの形は、
+    // 受け取った人がその手番に sh として受け取ったものを覚えておく。
+    function gmState(now) {
+      return {
+        type: 'S',
+        ph: gm.ph,
+        n: gm.n,
+        pid: gm.pid,
+        sh: gm.sh,
+        dy: gm.dy,
+        ax: gm.ax,
+        aa: gm.aa,
+        left: gm.ph === 'aim' ? Math.max(0, gm.turnEnds - now) : 0,
+        b: gmSnapshot().map(function (b) {
+          return [b.id, Math.round(b.x * 10), Math.round(b.y * 10), Math.round(b.a * 1000), b.o];
+        }),
+        out: gm.out.slice(),
+        lost: gm.lost,
+        res: gm.res
+      };
+    }
+
+    // 状態を全員に配る。手番の切り替わりなど、途中参加者に渡したい区切りでは登録もし直す。
+    // 途中参加者は前の手番の sh を受け取っていないので、登録する状態には全部の形を入れる。
+    function gmPublish(milestone) {
+      var now = Date.now();
+      var state = gmState(now);
+      Hitsumabushi.sendGameData(state);
+      if (milestone) Hitsumabushi.setMatchState(Object.assign({ shapes: gm.shapes }, state));
+      gm.sentAt = now;
+      gm.dirty = false;
+      applyView(state, now);
+    }
+
+    function gmTick(now) {
+      if (gm.ph === 'intro' && now >= gm.phaseEnds) gmStartTurn(now);
+      else if (gm.ph === 'aim') {
+        if (gm.cpu) gmCpuStep(now);
+        if (gm.ph === 'aim' && now >= gm.turnEnds + (gm.cpu ? 0 : AIM_GRACE_MS)) gmDrop(gm.ax, gm.aa, now);
+      } else if (gm.ph === 'fall') gmPhysics(now);
+      else if (gm.ph === 'out' && now >= gm.phaseEnds) gmStartTurn(now);
+      else if (gm.ph === 'over' && !gm.overSent && now >= gm.phaseEnds) {
+        gm.overSent = true;
+        if (teamMode) Hitsumabushi.sendGameOver({ winnerTeamId: gm.res[0], rankings: gm.res });
+        else Hitsumabushi.sendGameOver({ winnerPlayerId: gm.res[0], rankings: gm.res });
+        return;
+      }
+      if (Hitsumabushi.phase === 'over') return;
+      if ((gm.dirty && now - gm.sentAt >= SEND_MS) || now - gm.sentAt >= HEARTBEAT_MS) gmPublish(false);
+    }
+
+    // ---------- 届いた状態の反映（進行役も自分の状態をここに通す） ----------
+    function decodeBodies(b) {
+      return b.map(function (e) {
+        return { id: e[0], x: e[1] / 10, y: e[2] / 10, a: e[3] / 1000, o: e[4] };
+      });
+    }
+
+    function applyView(state, now) {
+      var prev = view;
+      view = state;
+      viewAt = now;
+      if (state.shapes) Object.keys(state.shapes).forEach(function (n) { shapeTable[n] = state.shapes[n]; });
+      if (state.sh) shapeTable[state.n] = state.sh;
+      if (!gm) {
+        var bodies = decodeBodies(state.b);
+        snaps = { prev: snaps ? snaps.curr : { t: now, list: bodies }, curr: { t: now, list: bodies } };
+      }
+      // 新しい手番になったら照準を作り直す
+      if (isPlayer && state.ph === 'aim' && state.pid === myId && (!myAim || myAim.n !== state.n)) {
+        myAim = { n: state.n, x: state.ax, a: state.aa, dropped: false, sentX: state.ax, sentA: state.aa, sentAt: 0 };
+        beep(660, 120, 'triangle');
+      }
+      if (prev && prev.n === state.n && prev.ph === 'aim' && state.ph === 'fall') beep(240, 90);
+      if (state.out.length > seenOut) {
+        seenOut = state.out.length;
+        crash();
+      }
+      if (state.ph === 'over' && (!prev || prev.ph !== 'over')) beep(784, 400, 'triangle', 0.08);
+    }
+
+    function sanitizeX(x) {
+      x = Math.round(Number(x));
+      if (!isFinite(x)) return null;
+      return Math.max(AIM_MIN, Math.min(AIM_MAX, x));
+    }
+    function sanitizeA(a) {
+      a = Math.round(Number(a));
+      if (!isFinite(a)) return null;
+      return ((a % ANGLE_STEPS) + ANGLE_STEPS) % ANGLE_STEPS;
+    }
+
+    // ---------- 自分の操作 ----------
+    function myTurn() {
+      return isPlayer && view && view.ph === 'aim' && view.pid === myId && myAim && myAim.n === view.n
+        && !myAim.dropped && Hitsumabushi.phase !== 'over';
+    }
+
+    function timeLeft(now) {
+      if (!view || view.ph !== 'aim') return 0;
+      return Math.max(0, view.left - (now - viewAt));
+    }
+
+    function setAim(x, a) {
+      if (!myTurn() || timeLeft(Date.now()) <= 0) return;
+      myAim.x = x;
+      myAim.a = a;
+      if (gm) gmAim(x, a);
+    }
+
+    function moveTo(x) { setAim(sanitizeX(x), myAim.a); }
+    function rotate(d) {
+      if (!myTurn()) return;
+      setAim(myAim.x, sanitizeA(myAim.a + d));
+      beep(520, 40, 'triangle', 0.03);
+    }
+
+    function drop() {
+      if (!myTurn()) return;
+      myAim.dropped = true;
+      if (gm) gmDrop(myAim.x, myAim.a, Date.now());
+      else Hitsumabushi.sendGameData({ type: 'DROP', n: myAim.n, x: myAim.x, a: myAim.a });
+    }
+
+    // 進行役以外の手番の人は、照準の動きを間引いて送る（観戦している人にも見えるように）
+    function sendAim(now) {
+      if (gm || !myTurn()) return;
+      if (myAim.x === myAim.sentX && myAim.a === myAim.sentA) return;
+      if (now - myAim.sentAt < AIM_SEND_MS) return;
+      Hitsumabushi.sendGameData({ type: 'AIM', n: myAim.n, x: myAim.x, a: myAim.a });
+      myAim.sentX = myAim.x;
+      myAim.sentA = myAim.a;
+      myAim.sentAt = now;
+    }
+
+    function toLogicalX(e) {
+      var r = canvasEl.getBoundingClientRect();
+      if (!r.width) return null;
+      return viewLeft + ((e.clientX - r.left) / r.width) * viewW;
+    }
+
+    var dragging = false;
+    function onPointerDown(e) {
+      unlockAudio();
+      if (!myTurn()) return;
+      var x = toLogicalX(e);
+      if (x === null) return;
+      e.preventDefault();
+      dragging = true;
+      try { canvasEl.setPointerCapture(e.pointerId); } catch (err) { /* マウス以外で捕捉できない環境では捕捉なしで続ける */ }
+      moveTo(x);
+    }
+    function onPointerMove(e) {
+      if (!dragging) return;
+      var x = toLogicalX(e);
+      if (x !== null) moveTo(x);
+    }
+    function onPointerUp() { dragging = false; }
+
+    function onKeyDown(e) {
+      if (!myTurn()) return;
+      if (e.key === 'ArrowLeft') moveTo(myAim.x - MOVE_STEP);
+      else if (e.key === 'ArrowRight') moveTo(myAim.x + MOVE_STEP);
+      else if (e.key === 'z' || e.key === 'Z' || e.key === 'ArrowUp') rotate(-1);
+      else if (e.key === 'x' || e.key === 'X') rotate(1);
+      else if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowDown') drop();
+      else return;
+      e.preventDefault();
+    }
+
+    // ---------- 音 ----------
+    var audio = null;
+    var muted = false;
+    function unlockAudio() {
+      if (audio) return;
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audio = new Ctx();
+      if (audio.state === 'suspended') audio.resume();
+    }
+    function beep(freq, ms, type, gain) {
+      if (!audio || muted) return;
+      var osc = audio.createOscillator();
+      var g = audio.createGain();
+      osc.type = type || 'square';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(gain || 0.06, audio.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + ms / 1000);
+      osc.connect(g);
+      g.connect(audio.destination);
+      osc.start();
+      osc.stop(audio.currentTime + ms / 1000);
+    }
+    function crash() {
+      beep(160, 260, 'sawtooth', 0.08);
+      beep(90, 500, 'sawtooth', 0.06);
+    }
+
+    // ---------- 表示 ----------
+    var canvasEl, ctx, stageEl, promptEl, timerFillEl, timerTextEl, rosterEl, bannerEl, stampEl;
+    var controlsEl, infoEl, rotLBtn, rotRBtn, dropBtn, rankingEl;
+    // 画面に見せる範囲（論理座標）。ステージの縦横比に合わせて広げる。
+    // 横長の画面では左右を広く見せ、縦長の画面では上下を広く見せる。どちらでも、
+    // 幅 W（土台と照準が動ける範囲）と高さ MIN_VIEW_H 以上は必ず入る。
+    var MIN_VIEW_H = 560;
+    var scale = 0;              // 論理座標 1 あたりの CSS px
+    var viewLeft = 0;           // 見せる範囲の左端の x
+    var viewW = W;              // 見せる範囲の幅
+    var viewH = H;              // 見せる範囲の高さ
+    var dpr = 1;
+    // 前回描いた内容。null は「まだ描いていない」で、次は必ず描く
+    var rosterKey = null;
+    var stampKey = null;
+    var rankingKey = null;
+
+    function nameOf(id) {
+      if (id === myId) return 'あなた';
+      return players[id] ? players[id].name : id;
+    }
+    function unitName(u) { return teamMode ? unitInfo[u].name : nameOf(u); }
+    function winsText(u) { return unitName(u) + (!teamMode && u === myId ? 'の勝ち！' : ' の勝ち！'); }
+    function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
+
+    function render(now) {
+      if (!config || !view) return;
+      renderHud(now);
+      renderRoster();
+      renderStage();
+      renderControls(now);
+      renderRanking();
+      draw(now);
+    }
+
+    function renderHud(now) {
+      var mine = view.ph === 'aim' && view.pid === myId;
+      var text;
+      if (view.ph === 'intro') text = 'まもなくスタート';
+      else if (view.ph === 'over') text = '決着！';
+      else if (view.ph === 'out') text = unitName(view.lost) + ' 脱落';
+      else if (mine) text = 'あなたの番！';
+      else text = nameOf(view.pid) + ' の番' + (teamMode ? '（' + unitInfo[unitOf(view.pid)].name + '）' : '');
+      setText(promptEl, text);
+      promptEl.classList.toggle('mine', mine);
+
+      var left = timeLeft(now);
+      var full = view.ph === 'aim' ? left : view.ph === 'intro' ? AIM_MS : 0;
+      timerFillEl.style.width = ((full / AIM_MS) * 100).toFixed(1) + '%';
+      timerFillEl.classList.toggle('low', view.ph === 'aim' && left <= 3000);
+      setText(timerTextEl, view.ph === 'aim' ? '残り ' + Math.ceil(left / 1000) + '秒' : '');
+
+      if (mine && myAim && !myAim.dropped && left > 0 && left <= 3000) {
+        var sec = Math.ceil(left / 1000);
+        if (sec !== lastBeepSec) { lastBeepSec = sec; beep(880, 70); }
+      }
+    }
+
+    function renderRoster() {
+      var key = [view.ph, view.pid, view.out.join(','), (view.res || []).join(',')].join('|');
+      if (key === rosterKey) return;
+      rosterKey = key;
+      rosterEl.innerHTML = '';
+      config.players.forEach(function (p) {
+        var u = unitOf(p.id);
+        var chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.setAttribute('data-player', p.id);
+        var dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = unitInfo[u].color;
+        var name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = nameOf(p.id);
+        var state = document.createElement('span');
+        state.className = 'state';
+        if (view.res) {
+          var rank = view.res.indexOf(u) + 1;
+          state.textContent = rank + '位';
+          if (rank === 1) chip.className += ' winner';
+          else chip.className += ' out';
+        } else if (view.out.indexOf(u) !== -1) {
+          chip.className += ' out';
+          state.textContent = '脱落';
+        } else if (view.ph === 'aim' || view.ph === 'fall') {
+          if (view.pid === p.id) { chip.className += ' focus'; state.textContent = '手番'; }
+          else state.textContent = teamMode ? unitInfo[u].name : '';
+        } else {
+          state.textContent = teamMode ? unitInfo[u].name : '';
+        }
+        chip.appendChild(dot);
+        chip.appendChild(name);
+        chip.appendChild(state);
+        rosterEl.appendChild(chip);
+      });
+    }
+
+    function renderStage() {
+      var banner;
+      if (view.ph === 'over') banner = '🏆 ' + winsText(view.res[0]);
+      else if (view.ph === 'intro') banner = '順番にブロックを積もう。落とした人が脱落';
+      // 手番の間は出さない（照準のブロックに重なる。操作の説明は下の操作欄に出す）
+      else banner = '';
+      setText(bannerEl, banner);
+
+      var key = view.lost && (view.ph === 'out' || view.ph === 'over') ? view.lost + '#' + view.out.length : '';
+      if (key === stampKey) return;
+      stampKey = key;
+      stampEl.innerHTML = '';
+      if (!key) return;
+      var title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = '崩れた！';
+      var sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = unitName(view.lost) + ' 脱落';
+      stampEl.appendChild(title);
+      stampEl.appendChild(sub);
+    }
+
+    function renderControls(now) {
+      var myUnit = isPlayer ? unitOf(myId) : null;
+      var visible = isPlayer && !view.res && view.out.indexOf(myUnit) === -1;
+      controlsEl.classList.toggle('hidden', !visible);
+      var active = myTurn() && timeLeft(now) > 0;
+      document.body.classList.toggle('my-turn', active);
+      document.body.classList.toggle('dragging', active && dragging);
+      if (!visible) return;
+      rotLBtn.disabled = !active;
+      rotRBtn.disabled = !active;
+      dropBtn.disabled = !active;
+      var info;
+      if (active) info = '↺↻で回す・ドラッグで動かす';
+      else if (view.ph === 'aim' && view.pid === myId) info = '落とした！';
+      else if (teamMode && view.pid && unitOf(view.pid) === myUnit) info = '味方の番です';
+      else info = '自分の番を待っています';
+      setText(infoEl, info);
+    }
+
+    function renderRanking() {
+      var key = view.res ? view.res.join(',') : '';
+      if (key === rankingKey) return;
+      rankingKey = key;
+      rankingEl.classList.toggle('hidden', !view.res);
+      rankingEl.innerHTML = '';
+      if (!view.res) return;
+      view.res.forEach(function (u, i) {
+        var row = document.createElement('div');
+        row.className = 'rank-row' + (i === 0 ? ' first' : '');
+        row.setAttribute('data-unit', u);
+        var outAt = view.out.indexOf(u);
+        [
+          ['pos', (i + 1) + '位'],
+          ['name', unitName(u)],
+          ['detail', outAt === -1 ? '最後まで残った' : (outAt + 1) + '番目に崩した']
+        ].forEach(function (cell) {
+          var span = document.createElement('span');
+          span.className = cell[0];
+          span.textContent = cell[1];
+          row.appendChild(span);
+        });
+        rankingEl.appendChild(row);
+      });
+    }
+
+    // ---------- canvas ----------
+    function fitCanvas() {
+      var w = stageEl.clientWidth, h = stageEl.clientHeight;
+      if (!w || !h) return;     // 初期化直後や非表示の間は 0 になる
+      var cw = Math.floor(w - 8), ch = Math.floor(h - 8);
+      if (cw <= 0 || ch <= 0) return;
+      var sc = Math.min(cw / W, ch / MIN_VIEW_H);
+      if (sc === scale && cw / sc === viewW && ch / sc === viewH) return;
+      scale = sc;
+      viewW = cw / sc;
+      viewH = ch / sc;
+      viewLeft = W / 2 - viewW / 2;
+      dpr = window.devicePixelRatio || 1;
+      canvasEl.style.width = cw + 'px';
+      canvasEl.style.height = ch + 'px';
+      canvasEl.width = Math.round(cw * dpr);
+      canvasEl.height = Math.round(ch * dpr);
+    }
+
+    function lerpAngle(a, b, t) {
+      var d = b - a;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      return a + d * t;
+    }
+
+    // 描くブロックの一覧。進行役は物理演算そのもの、ほかの人は届いた2つの状態の間を補間する。
+    function bodiesToDraw(now) {
+      if (gm) return gmSnapshot();
+      if (!snaps) return [];
+      var span = snaps.curr.t - snaps.prev.t;
+      var t = span > 0 ? Math.min(1, (now - snaps.curr.t) / span) : 1;
+      var before = {};
+      snaps.prev.list.forEach(function (b) { before[b.id] = b; });
+      return snaps.curr.list.map(function (b) {
+        var p = before[b.id];
+        if (!p) return b;
+        return { id: b.id, o: b.o, x: p.x + (b.x - p.x) * t, y: p.y + (b.y - p.y) * t, a: lerpAngle(p.a, b.a, t) };
+      });
+    }
+
+    // 形の外側の輪郭（線分 [x0, y0, x1, y1] の一覧）。パーツどうしは辺の一部を共有してつながっているので、
+    // 各辺から、ほかのパーツの辺と重なっている区間を取り除いた残りが輪郭になる。
+    var outlineTable = {};      // 手番の番号 -> 輪郭
+    function outlineOf(n) {
+      if (outlineTable[n]) return outlineTable[n];
+      var parts = shapeTable[n];
+      var EPS = 0.05;
+      var segs = [];
+      parts.forEach(function (poly, i) {
+        poly.forEach(function (a, k) {
+          var b = poly[(k + 1) % poly.length];
+          var len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          if (len < EPS) return;
+          var ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len;
+          var covered = [];
+          parts.forEach(function (other, j) {
+            if (j === i) return;
+            other.forEach(function (c, m) {
+              var e = other[(m + 1) % other.length];
+              var dc = ux * (c[1] - a[1]) - uy * (c[0] - a[0]);
+              var de = ux * (e[1] - a[1]) - uy * (e[0] - a[0]);
+              if (Math.abs(dc) > EPS || Math.abs(de) > EPS) return;   // 同じ直線の上にない
+              var t0 = ux * (c[0] - a[0]) + uy * (c[1] - a[1]);
+              var t1 = ux * (e[0] - a[0]) + uy * (e[1] - a[1]);
+              var lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(len, Math.max(t0, t1));
+              if (hi - lo > EPS) covered.push([lo, hi]);
+            });
+          });
+          covered.sort(function (p, q) { return p[0] - q[0]; });
+          var t = 0;
+          covered.concat([[len, len]]).forEach(function (iv) {
+            if (iv[0] - t > EPS) segs.push([a[0] + ux * t, a[1] + uy * t, a[0] + ux * iv[0], a[1] + uy * iv[0]]);
+            t = Math.max(t, iv[1]);
+          });
+        });
+      });
+      outlineTable[n] = segs;
+      return segs;
+    }
+
+    function outlinePath(n, x, y, a) {
+      var c = Math.cos(a), sn = Math.sin(a);
+      ctx.beginPath();
+      outlineOf(n).forEach(function (s) {
+        ctx.moveTo(x + s[0] * c - s[1] * sn, y + s[0] * sn + s[1] * c);
+        ctx.lineTo(x + s[2] * c - s[3] * sn, y + s[2] * sn + s[3] * c);
+      });
+    }
+
+    // 形の塗りのパスを作る。パーツごとに閉じた多角形を足す（線は outlinePath で引く）
+    function shapePath(parts, x, y, a) {
+      var c = Math.cos(a), sn = Math.sin(a);
+      ctx.beginPath();
+      parts.forEach(function (poly) {
+        poly.forEach(function (v, i) {
+          var px = x + v[0] * c - v[1] * sn;
+          var py = y + v[0] * sn + v[1] * c;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+      });
+    }
+
+    function hexAlpha(color, alpha) {
+      var r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+
+    function unitColorAt(o) { return units[o] ? unitInfo[units[o]].color : '#94a3b8'; }
+
+    function draw(now) {
+      if (!ctx || !scale || !view) return;
+      var list = bodiesToDraw(now);
+      // 低いうちは土台が下に見える位置。積み上がったら、照準の上に余白を残して追いかける。
+      var target = Math.min(PLATFORM_TOP + 80 - viewH, view.dy - (view.sh ? shapeRadius(view.sh) : 100) - 60);
+      if (cam === null) cam = target;   // 試合の始めや途中参加の直後は、動かさずにそこから映す
+      cam += (target - cam) * 0.08;
+      if (Math.abs(target - cam) < 0.5) cam = target;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      var k = scale * dpr;
+      ctx.setTransform(k, 0, 0, k, -viewLeft * k, -cam * k);
+
+      // 背景の目盛り（50px ごと。上へ積むほど流れる）
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.07)';
+      ctx.lineWidth = 1;
+      for (var gy = Math.floor(cam / 50) * 50; gy < cam + viewH; gy += 50) {
+        ctx.beginPath();
+        ctx.moveTo(viewLeft, gy);
+        ctx.lineTo(viewLeft + viewW, gy);
+        ctx.stroke();
+      }
+
+      // 土台
+      var px = W / 2 - PLATFORM_W / 2;
+      ctx.fillStyle = 'rgba(255, 0, 127, 0.12)';
+      ctx.fillRect(px + 30, PLATFORM_TOP + PLATFORM_H, PLATFORM_W - 60, viewH);
+      ctx.shadowColor = 'rgba(255, 0, 127, 0.9)';
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = '#ff007f';
+      ctx.fillRect(px, PLATFORM_TOP, PLATFORM_W, PLATFORM_H);
+      ctx.shadowBlur = 0;
+
+      // ブロック
+      var top = PLATFORM_TOP;
+      list.forEach(function (b) {
+        var parts = shapeTable[b.id];
+        if (!parts) return;     // 形をまだ受け取っていない（途中参加の直後）
+        var color = unitColorAt(b.o);
+        shapePath(parts, b.x, b.y, b.a);
+        ctx.fillStyle = hexAlpha(color, 0.3);
+        ctx.fill();
+        outlinePath(b.id, b.x, b.y, b.a);
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = color;
+        ctx.stroke();
+        if (b.y <= FALL_Y) {
+          parts.forEach(function (poly) {
+            poly.forEach(function (v) {
+              top = Math.min(top, b.y + v[0] * Math.sin(b.a) + v[1] * Math.cos(b.a));
+            });
+          });
+        }
+      });
+
+      // 照準（これから落とすブロック）
+      if (view.ph === 'aim' && view.sh) {
+        var mine = view.pid === myId && myAim && myAim.n === view.n;
+        var ax = mine ? myAim.x : view.ax;
+        var aa = mine ? myAim.a : view.aa;
+        var color2 = unitColorAt(units.indexOf(unitOf(view.pid)));
+        ctx.setLineDash([6, 8]);
+        ctx.strokeStyle = hexAlpha(color2, 0.5);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(ax, view.dy);
+        ctx.lineTo(ax, top);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        var angle = (aa * Math.PI * 2) / ANGLE_STEPS;
+        shapePath(view.sh, ax, view.dy, angle);
+        ctx.fillStyle = hexAlpha(color2, 0.45);
+        ctx.fill();
+        outlinePath(view.n, ax, view.dy, angle);
+        ctx.shadowColor = color2;
+        ctx.shadowBlur = 16;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      // 高さ
+      // 高さの表示は、画面の大きさにかかわらず同じ文字の大きさで、左上に出す
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.font = 'bold 16px "Segoe UI", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(10, 11, 16, 0.85)';
+      var label = '高さ ' + ((PLATFORM_TOP - top) / 100).toFixed(1) + 'm';
+      ctx.strokeText(label, 12, 44);
+      ctx.fillStyle = '#39ff14';
+      ctx.fillText(label, 12, 44);
+    }
+
+    // ---------- 進行 ----------
+    function tick() {
+      if (!config) return;
+      if (Hitsumabushi.phase === 'over') return;
+      var now = Date.now();
+      if (gm) gmTick(now);
+      if (Hitsumabushi.phase === 'over') return;
+      sendAim(now);
+      render(now);
+    }
+
+    function applyObsMode(isObs) {
+      document.body.classList.toggle('transparent', isObs);
+    }
+
+    Hitsumabushi.init({
+      onCreateMatch: function () {
+        canvasEl = document.getElementById('tower');
+        ctx = canvasEl.getContext('2d');
+        stageEl = document.getElementById('stage');
+        promptEl = document.getElementById('prompt');
+        timerFillEl = document.getElementById('timerFill');
+        timerTextEl = document.getElementById('timerText');
+        rosterEl = document.getElementById('roster');
+        bannerEl = document.getElementById('banner');
+        stampEl = document.getElementById('stamp');
+        controlsEl = document.getElementById('controls');
+        infoEl = document.getElementById('info');
+        rotLBtn = document.getElementById('rotLBtn');
+        rotRBtn = document.getElementById('rotRBtn');
+        dropBtn = document.getElementById('dropBtn');
+        rankingEl = document.getElementById('ranking');
+
+        canvasEl.addEventListener('pointerdown', onPointerDown);
+        canvasEl.addEventListener('pointermove', onPointerMove);
+        canvasEl.addEventListener('pointerup', onPointerUp);
+        canvasEl.addEventListener('pointercancel', onPointerUp);
+        // ドラッグで画面がスクロール・ズームしないようにする
+        canvasEl.addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
+        canvasEl.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+        document.addEventListener('keydown', onKeyDown);
+
+        rotLBtn.addEventListener('click', function () { unlockAudio(); rotate(-1); });
+        rotRBtn.addEventListener('click', function () { unlockAudio(); rotate(1); });
+        dropBtn.addEventListener('click', function () { unlockAudio(); drop(); });
+        document.addEventListener('pointerdown', unlockAudio);
+        var muteBtn = document.getElementById('muteBtn');
+        muteBtn.addEventListener('click', function () {
+          unlockAudio();
+          muted = !muted;
+          muteBtn.textContent = muted ? '🔇' : '🔊';
+        });
+
+        new ResizeObserver(fitCanvas).observe(stageEl);
+      },
+
+      onStartMatch: function (cfg) {
+        config = cfg;
+        myId = cfg.localPlayerId;
+        document.body.classList.toggle('spectating', Hitsumabushi.isSpectator());
+        applyObsMode(cfg.isObsMode);
+
+        teamMode = cfg.players.some(function (p) { return !!p.teamId; });
+        players = {};
+        units = [];
+        unitInfo = {};
+        cfg.players.forEach(function (p) {
+          var u = teamMode ? p.teamId : p.id;
+          players[p.id] = { name: p.name, unit: u, isCpu: !!p.isCpu };
+          if (!unitInfo[u]) {
+            unitInfo[u] = { name: teamMode ? p.teamName : p.name, color: PALETTE[units.length % PALETTE.length], members: [] };
+            units.push(u);
+          }
+          unitInfo[u].members.push(p.id);
+        });
+        // 着席していない部屋の作成者は観戦者ではないが、積む人でもない
+        isPlayer = myId !== null && !Hitsumabushi.isSpectator() && !!players[myId];
+
+        view = null;
+        viewAt = 0;
+        snaps = null;
+        myAim = null;
+        shapeTable = {};
+        outlineTable = {};
+        seenOut = 0;
+        cam = null;
+        lastBeepSec = -1;
+        dragging = false;
+        rosterKey = null;
+        stampKey = null;
+        rankingKey = null;
+        gm = null;
+        if (Hitsumabushi.isGameMaster()) {
+          gmCreate();
+          gmPublish(true);
+        } else {
+          // 進行役の最初の状態は、自分の開始より先に届いて捨てられることがある。
+          // 試合の始まりは全員同じなので、進行役の次の状態が届くまで同じ画面を自分で出す。
+          applyView({
+            type: 'S', ph: 'intro', n: 0, pid: null, sh: null, dy: INTRO_DY, ax: W / 2, aa: 0,
+            left: 0, b: [], out: [], lost: null, res: null
+          }, Date.now());
+        }
+        if (ticker) clearInterval(ticker);
+        ticker = setInterval(tick, 16);
+        render(Date.now());
+      },
+
+      onMatchState: function (state) {
+        if (!state || state.type !== 'S') return;
+        applyView(state, Date.now());
+        render(Date.now());
+      },
+
+      onGameData: function (payload, senderId) {
+        if (Hitsumabushi.phase === 'over' || !payload || !config) return;
+        var now = Date.now();
+        if (payload.type === 'S') {
+          if (gm || senderId !== config.gameMasterId) return;
+          applyView(payload, now);
+          render(now);
+          return;
+        }
+        // 手番の人の操作は、進行役だけが受け付ける
+        if (!gm || gm.ph !== 'aim' || senderId !== gm.pid || payload.n !== gm.n || gm.cpu) return;
+        var x = sanitizeX(payload.x), a = sanitizeA(payload.a);
+        if (x === null || a === null) return;
+        if (payload.type === 'AIM') gmAim(x, a);
+        else if (payload.type === 'DROP') gmDrop(x, a, now);
+      },
+
+      onError: function (code, detail) {
+        console.error('[neon-stack-tower]', code, detail && detail.message);
+      }
+    });
+  </script>
+</body>
+</html>
