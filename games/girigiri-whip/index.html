@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ギリギリ！ホイップ盛り</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overscroll-behavior: none; overflow: hidden; height: 100%; }
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+      background-color: #13261f;
+      color: #f6efe4;
+      display: flex;
+      justify-content: center;
+    }
+    body.transparent { background-color: transparent !important; }
+    :root:has(body.transparent) { background-color: transparent !important; }
+
+    .app {
+      width: 100%;
+      max-width: 640px;
+      height: 100%;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card {
+      background: rgba(28, 52, 43, 0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(214, 178, 128, 0.35);
+      border-radius: 16px;
+    }
+
+    .hud {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 14px;
+      font-size: 0.95rem;
+    }
+    .hud .title { color: #e8c48f; font-weight: bold; }
+    .hud .timer { font-size: 1.3rem; font-variant-numeric: tabular-nums; color: #fff6e0; }
+
+    .spectator-badge {
+      display: none;
+      align-self: center;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(232, 196, 143, 0.15);
+      border: 1px solid #e8c48f;
+      color: #e8c48f;
+      font-size: 0.85rem;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    body.spectating .play-area { pointer-events: none; }
+    body.spectating .mine { display: none; }
+
+    /* 長押しの場所。ブラウザのスクロール・ズーム・長押しメニューを止める */
+    .arena {
+      flex: 1;
+      min-height: 200px;
+      position: relative;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      cursor: pointer;
+    }
+    .arena canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .stage-msg {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 1rem;
+      color: #fff6e0;
+      text-shadow: 0 1px 4px #000;
+      pointer-events: none;
+    }
+
+    .others {
+      flex-shrink: 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 8px;
+    }
+    .others:empty { display: none; }
+    .other {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 68px;
+      font-size: 0.7rem;
+      color: #d8cbb8;
+    }
+    body.spectating .others { flex: 1; align-content: center; }
+    body.spectating .other { width: 96px; }
+    .other .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .other .status { color: #e8c48f; }
+    .other.burst .status { color: #ff8a8a; }
+    canvas.mini { width: 56px; height: 70px; display: block; }
+    body.spectating .other canvas.mini { width: 84px; height: 105px; }
+
+    .controls { flex-shrink: 0; display: flex; justify-content: center; padding: 8px; }
+    .hold-btn {
+      min-width: 200px;
+      min-height: 56px;
+      padding: 10px 24px;
+      border-radius: 999px;
+      border: 2px solid #e8c48f;
+      background: rgba(232, 196, 143, 0.18);
+      color: #fff6e0;
+      font-size: 1.1rem;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    .hold-btn.holding { background: rgba(232, 196, 143, 0.45); }
+    .hold-btn:disabled { opacity: 0.35; cursor: default; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 16px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .overlay[hidden] { display: none; }
+    .result {
+      width: 100%;
+      max-width: 420px;
+      max-height: 60%;
+      pointer-events: auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 16px;
+    }
+    .result h2 { font-size: 1.1rem; color: #e8c48f; text-align: center; margin-bottom: 10px; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+    .row .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .pts { font-variant-numeric: tabular-nums; color: #fff6e0; }
+    .row .grade { width: 3.5em; text-align: center; font-weight: bold; color: #e8c48f; }
+    .row.burst .grade { color: #ff8a8a; }
+    .row canvas.mini { width: 40px; height: 50px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="hud card">
+      <span class="title">ギリギリ！ホイップ盛り</span>
+      <span class="timer" id="timer">5.0</span>
+    </header>
+    <div class="spectator-badge">👀 観戦中</div>
+
+    <!-- 操作できるUIは .play-area の中に置く（観戦時はロックする） -->
+    <main class="arena card play-area mine" id="arena">
+      <canvas id="scene"></canvas>
+      <div class="stage-msg" id="stageMsg">よーい…</div>
+    </main>
+
+    <div class="others card" id="others"></div>
+
+    <div class="controls play-area mine">
+      <button class="hold-btn" id="holdBtn" disabled>長押しでしぼる</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay" hidden>
+    <div class="result card" id="resultBox"></div>
+  </div>
+
+  <script src="https://milightpartner.jp/sdk/0.29.2/hitsumabushi-sdk.js"></script>
+  <script>
+    // ---- ルールの数値（試遊で調整する） ----
+    const COUNTDOWN_MS = 1500;     // 「よーい」
+    const PRESS_WINDOW_MS = 5000;  // 押し始められる時間。過ぎたら 0 点
+    const MAX_HOLD_MS = 6000;      // 押し続けて高さ 100% に届く時間
+    const LIMIT_MIN_MS = 3300;     // 限界の下限（55%）
+    const LIMIT_SPAN_MS = 2401;    // 限界の幅。上限は 3300 + 2400 = 5700（95%）
+    const GRACE_MS = 2000;         // 届かない stop を待つ余裕（通信の遅れ分）
+    const REVEAL_MS = 2500;        // 結果の公開から決着の報告まで
+    const CPU_PRESS_MIN_MS = 400;  // CPU が押し始める時刻（開始からの範囲）
+    const CPU_PRESS_SPAN_MS = 2600;
+    const CPU_STOP_MIN = 0.80;     // CPU が止める位置（限界に対する割合の範囲）
+    const CPU_STOP_SPAN = 0.22;
+
+    // 描画の単位（カップの高さが 100）
+    const CUP_H = 100;
+    const WHIP_MAX = 110;          // 高さ 100% のときのホイップの高さ
+
+    const $ = (id) => document.getElementById(id);
+
+    // ---- 限界：全員が同じ config から同じ値を計算する（配らない） ----
+    function fnv1a32(str) {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+      }
+      return h >>> 0;
+    }
+    function limitOf(config) {
+      return LIMIT_MIN_MS + fnv1a32(config.seriesId + ':' + config.matchNumber) % LIMIT_SPAN_MS;
+    }
+
+    // ---- 得点 ----
+    const isBurst = (ms) => ms >= S.limitMs;
+    function scoreOf(ms) { return ms > 0 && !isBurst(ms) ? Math.floor(ms * 1000 / S.limitMs) / 10 : 0; }
+    function gradeOf(ms) {
+      if (ms === 0) return '—';
+      if (isBurst(ms)) return 'あふれ';
+      const s = scoreOf(ms);
+      return s >= 97 ? 'S' : s >= 90 ? 'A' : s >= 75 ? 'B' : 'C';
+    }
+
+    // ---- 試合の状態（onStartMatch で毎回作り直す） ----
+    let S = null;
+    let timers = [];
+    // 今の試合より先の試合のパケット。試合開始の知らせは全員に同時には届かず、
+    // 送り主が違うパケット同士の順番も保たれないため、onStartMatch の前に届くことがある
+    let pending = [];
+
+    function later(ms, fn) { timers.push(setTimeout(fn, ms)); }
+    function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+    function newState(config) {
+      const players = config.players.map((p) => ({ id: p.id, name: p.name, isCpu: !!p.isCpu }));
+      const me = config.localPlayerId;
+      const now = Date.now();
+      const playStart = now + COUNTDOWN_MS;
+      return {
+        match: config.matchNumber,
+        limitMs: limitOf(config),
+        players,
+        me,
+        canPlay: !Hitsumabushi.isSpectator() && me !== null && players.some((p) => p.id === me),
+        stage: 'countdown',     // countdown / play / reveal
+        playStart,
+        deadline: playStart + PRESS_WINDOW_MS,
+        timeoutAt: playStart + PRESS_WINDOW_MS + MAX_HOLD_MS + GRACE_MS,
+        holding: false,
+        holdStart: 0,
+        presses: {},            // id -> 押し始めを受け取った時刻（見た目用）
+        stops: {},              // id -> 押していた時間 ms
+        missing: {},            // id -> true（時間内に stop が届かなかった）
+        stopAt: {},             // id -> 止まった時刻（演出用）
+        revealAt: 0,
+        cpu: [],                // 進行役だけが持つ CPU の予定
+      };
+    }
+
+    const stopped = (id) => S.stops[id] !== undefined;
+    // 自分が止めるまでは、ほかの人があふれたかどうかと限界を見せない
+    function canSeeTruth() { return !S.canPlay || stopped(S.me) || S.stage === 'reveal'; }
+
+    // ---- 自分の操作 ----
+    // 「よーい」が終わったかを時刻で決める。描画のフレームを待つと、開始ちょうどに押した操作が
+    // 次のフレームまで「よーい」の間として無視される
+    function advanceStage(now) {
+      if (S.stage === 'countdown' && now >= S.playStart) S.stage = 'play';
+    }
+
+    function startHold() {
+      if (!S || !S.canPlay || Hitsumabushi.phase !== 'playing') return;
+      advanceStage(Date.now());
+      if (S.stage !== 'play' || S.holding || stopped(S.me)) return;
+      S.holding = true;
+      S.holdStart = Date.now();
+      S.presses[S.me] = S.holdStart;
+      Hitsumabushi.sendGameData({ t: 'press', m: S.match });
+    }
+
+    function endHold() {
+      if (!S || !S.holding) return;
+      // 押していた時間が 0 だと「押さなかった」と区別できないので、最短 1ms とする
+      finishMine(Math.min(S.limitMs, Math.max(1, Date.now() - S.holdStart)));
+    }
+
+    function finishMine(ms) {
+      if (stopped(S.me) || S.stage === 'reveal') return;
+      S.holding = false;
+      recordStop(S.me, ms);
+      Hitsumabushi.sendGameData({ t: 'stop', m: S.match, ms });
+    }
+
+    // ---- 全員：結果の記録と公開 ----
+    function recordStop(id, ms) {
+      if (stopped(id) || S.stage === 'reveal') return;
+      S.stops[id] = ms;
+      S.stopAt[id] = Date.now();
+      if (S.players.every((p) => stopped(p.id))) startReveal();
+    }
+
+    function applyPacket(p, senderId) {
+      if (!S.players.some((x) => x.id === senderId)) return;
+      if (p.t === 'press') {
+        if (!stopped(senderId) && S.presses[senderId] === undefined) S.presses[senderId] = Date.now();
+      } else if (p.t === 'stop') {
+        if (Number.isInteger(p.ms) && p.ms >= 0) recordStop(senderId, p.ms);
+      }
+    }
+
+    function startReveal() {
+      if (S.stage === 'reveal') return;
+      S.stage = 'reveal';
+      S.holding = false;
+      S.revealAt = Date.now();
+      showResult();
+      if (Hitsumabushi.isGameMaster()) later(REVEAL_MS, finishMatch);
+    }
+
+    // あふれずに止めた人のうち、押していた時間がいちばん長い人の勝ち（限界は全員共通なので
+    // 割合に直さず比べられる）。全員あふれた・押さなかった・いちばんが並んだときは引き分け
+    function winnerOf() {
+      const valid = S.players.filter((p) => S.stops[p.id] > 0 && !isBurst(S.stops[p.id]));
+      if (valid.length === 0) return null;
+      const best = Math.max(...valid.map((p) => S.stops[p.id]));
+      const top = valid.filter((p) => S.stops[p.id] === best);
+      return top.length === 1 ? top[0].id : null;
+    }
+
+    function finishMatch() {
+      if (Hitsumabushi.phase !== 'playing') return;
+      const scores = {};
+      S.players.forEach((p) => { scores[p.id] = scoreOf(S.stops[p.id]); });
+      const winner = winnerOf();
+      if (winner === null) Hitsumabushi.sendGameOver({ isTie: true, winnerPlayerId: null, scores });
+      else Hitsumabushi.sendGameOver({ winnerPlayerId: winner, scores });
+    }
+
+    // ---- 進行役だけ：CPU ----
+    function planCpu() {
+      S.cpu = S.players.filter((p) => p.isCpu).map((p) => ({
+        id: p.id,
+        pressAt: S.playStart + CPU_PRESS_MIN_MS + Math.random() * CPU_PRESS_SPAN_MS,
+        ms: Math.min(S.limitMs, Math.round(S.limitMs * (CPU_STOP_MIN + Math.random() * CPU_STOP_SPAN))),
+      }));
+    }
+
+    function tickCpu(now) {
+      for (const c of S.cpu) {
+        if (stopped(c.id)) continue;
+        if (S.presses[c.id] === undefined) {
+          if (now < c.pressAt) continue;
+          S.presses[c.id] = now;
+          Hitsumabushi.sendGameDataAs(c.id, { t: 'press', m: S.match });
+        } else if (now - S.presses[c.id] >= c.ms) {
+          Hitsumabushi.sendGameDataAs(c.id, { t: 'stop', m: S.match, ms: c.ms });
+          recordStop(c.id, c.ms);
+        }
+      }
+    }
+
+    // ---- 毎フレーム ----
+    function tick(now) {
+      if (!S || Hitsumabushi.phase !== 'playing') return;
+      advanceStage(now);
+      if (S.stage === 'play') {
+        if (S.holding && now - S.holdStart >= S.limitMs) finishMine(S.limitMs);
+        else if (S.canPlay && !S.holding && !stopped(S.me) && now >= S.deadline) finishMine(0);
+        if (Hitsumabushi.isGameMaster()) tickCpu(now);
+      }
+      // 切断などで stop が届かない人は 0 点として扱う。全員が同じ時刻を基準に数えるので、
+      // 進行役でない人の画面も同じ頃に公開に進む
+      if (S.stage !== 'reveal' && now >= S.timeoutAt) {
+        S.players.forEach((p) => {
+          if (!stopped(p.id)) { S.stops[p.id] = 0; S.missing[p.id] = true; }
+        });
+        startReveal();
+      }
+      render(now);
+    }
+
+    // ---- 描画 ----
+    const scene = { w: 0, h: 0, dpr: 1 };
+
+    function fitScene() {
+      const arena = $('arena');
+      const w = arena.clientWidth;
+      const h = arena.clientHeight;
+      if (w === 0 || h === 0) return; // 非表示の間は測れない。表示されたら ResizeObserver がまた呼ぶ
+      scene.dpr = window.devicePixelRatio || 1;
+      scene.w = w;
+      scene.h = h;
+      const c = $('scene');
+      c.width = Math.round(w * scene.dpr);
+      c.height = Math.round(h * scene.dpr);
+    }
+
+    // id の今の見た目。truth が false の間は、あふれた人も「限界の高さで止まった」ように見せる
+    function viewOf(id, now, truth) {
+      if (stopped(id)) {
+        const ms = S.stops[id];
+        const burst = truth && isBurst(ms);
+        return { frac: Math.min(ms, S.limitMs) / MAX_HOLD_MS, burst, burstT: burst ? (now - Math.max(S.stopAt[id], id === S.me ? 0 : S.revealAt)) / 1000 : 0, done: true, ms };
+      }
+      if (id === S.me && S.holding) return { frac: (now - S.holdStart) / MAX_HOLD_MS, burst: false, done: false, holding: true };
+      if (S.presses[id] !== undefined) return { frac: Math.min(1, (now - S.presses[id]) / MAX_HOLD_MS), burst: false, done: false, holding: true };
+      return { frac: 0, burst: false, done: false };
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    // カップの底の中心 (cx, by)、1単位 = k px。opt:
+    //   frac  ホイップの高さ（0〜1、1 で WHIP_MAX）
+    //   amp   揺れの幅（単位）, t 時刻（秒）
+    //   burst あふれた, burstT あふれてからの秒
+    //   drizzle キャラメルソースのかかり具合（0〜1）
+    //   limit 限界ラインの高さ（0〜1）。null で描かない
+    //   name  スリーブに書く名前, nozzle ノズルを描く
+    function drawCup(ctx, cx, by, k, opt) {
+      const topW = 72;
+      const botW = 52;
+      const rimY = by - CUP_H * k;
+      ctx.save();
+      ctx.lineJoin = 'round';
+
+      // 影
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(cx, by + 2 * k, botW * 0.6 * k, 4 * k, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ドリンク（キャラメルマキアート風：下がミルク、上にエスプレッソとキャラメル）
+      const fillTop = by - CUP_H * 0.9 * k;
+      const cupX = (y) => (botW + (topW - botW) * ((by - y) / (CUP_H * k))) / 2 * k;
+      ctx.beginPath();
+      ctx.moveTo(cx - cupX(by), by);
+      ctx.lineTo(cx - cupX(fillTop), fillTop);
+      ctx.lineTo(cx + cupX(fillTop), fillTop);
+      ctx.lineTo(cx + cupX(by), by);
+      ctx.closePath();
+      const g = ctx.createLinearGradient(0, fillTop, 0, by);
+      g.addColorStop(0, '#7a4a28');
+      g.addColorStop(0.18, '#a8703f');
+      g.addColorStop(0.35, '#e6cfae');
+      g.addColorStop(1, '#f3e6d2');
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      // スリーブ（クラフト紙）と名前
+      const sTop = by - CUP_H * 0.62 * k;
+      const sBot = by - CUP_H * 0.3 * k;
+      ctx.beginPath();
+      ctx.moveTo(cx - cupX(sBot) - 1.5 * k, sBot);
+      ctx.lineTo(cx - cupX(sTop) - 1.5 * k, sTop);
+      ctx.lineTo(cx + cupX(sTop) + 1.5 * k, sTop);
+      ctx.lineTo(cx + cupX(sBot) + 1.5 * k, sBot);
+      ctx.closePath();
+      ctx.fillStyle = '#c69a68';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(90,55,25,0.35)';
+      ctx.lineWidth = Math.max(1, 0.8 * k);
+      ctx.stroke();
+      if (opt.name && k > 0.6) {
+        ctx.fillStyle = '#2b2118';
+        ctx.font = 'bold ' + Math.round(11 * k) + "px 'Segoe Print', 'Comic Sans MS', 'Yu Gothic UI', cursive";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const name = opt.name.length > 8 ? opt.name.slice(0, 8) + '…' : opt.name;
+        ctx.save();
+        ctx.translate(cx, (sTop + sBot) / 2);
+        ctx.rotate(-0.06);
+        ctx.fillText(name, 0, 0, cupX(sTop) * 1.8);
+        ctx.restore();
+      }
+
+      // 透明なプラカップ
+      ctx.beginPath();
+      ctx.moveTo(cx - cupX(by), by);
+      ctx.lineTo(cx - topW / 2 * k, rimY);
+      ctx.lineTo(cx + topW / 2 * k, rimY);
+      ctx.lineTo(cx + cupX(by), by);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = Math.max(1, 1.2 * k);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(cx - topW * 0.36 * k, rimY + 6 * k);
+      ctx.lineTo(cx - botW * 0.34 * k, by - 6 * k);
+      ctx.stroke();
+      // 縁
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      roundRect(ctx, cx - (topW / 2 + 3) * k, rimY - 2 * k, (topW + 6) * k, 4 * k, 2 * k);
+      ctx.fill();
+
+      // ホイップ
+      drawWhip(ctx, cx, rimY, k, topW, opt);
+
+      // 限界ライン
+      if (opt.limit !== null && opt.limit !== undefined) {
+        const ly = rimY - opt.limit * WHIP_MAX * k;
+        ctx.setLineDash([4 * k, 3 * k]);
+        ctx.strokeStyle = '#ff8a8a';
+        ctx.lineWidth = Math.max(1, 1.2 * k);
+        ctx.beginPath();
+        ctx.moveTo(cx - 48 * k, ly);
+        ctx.lineTo(cx + 48 * k, ly);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (k > 0.6) {
+          ctx.fillStyle = '#ff8a8a';
+          ctx.font = Math.round(9 * k) + 'px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText('限界', cx + 30 * k, ly - 1 * k);
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawWhip(ctx, cx, rimY, k, topW, opt) {
+      const H = Math.max(0, opt.frac) * WHIP_MAX;
+      if (H <= 0.5 && !opt.nozzle) return;
+      const t = opt.t;
+      const ringH = 9;
+      const n = Math.max(1, Math.ceil(H / ringH));
+      // あふれたら、山ごと横に倒れながら落ちる
+      const fall = opt.burst ? Math.min(1, opt.burstT / 0.7) : 0;
+      ctx.save();
+      if (fall > 0) {
+        ctx.translate(cx + 30 * k * fall, rimY + 40 * k * fall * fall);
+        ctx.rotate(0.9 * fall);
+        ctx.translate(-cx, -rimY);
+        ctx.globalAlpha = 1 - 0.5 * fall;
+      }
+      const sway = (y) => opt.amp * Math.pow(y / Math.max(H, 1), 1.5) * Math.sin(t * 9 + y * 0.08);
+      for (let i = 0; i < n; i++) {
+        const y0 = i * ringH;
+        const yc = Math.min(H, y0 + ringH * 0.6);
+        // 下が太く、上ほど細い。低い山でも頂上はとがる
+        const taper = 1 - 0.62 * (y0 / WHIP_MAX) - 0.3 * Math.pow(y0 / Math.max(H, 1), 3);
+        const w = (topW * 0.5 + 2) * Math.max(0.18, taper);
+        const x = cx + sway(yc) * k;
+        const y = rimY - yc * k;
+        ctx.fillStyle = i % 2 ? '#fff8ee' : '#fffdf8';
+        ctx.beginPath();
+        ctx.ellipse(x, y, w * k, ringH * 0.75 * k, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(200,170,130,0.45)';
+        ctx.lineWidth = Math.max(0.8, 0.8 * k);
+        ctx.beginPath();
+        ctx.ellipse(x, y + 1.5 * k, w * k * 0.92, ringH * 0.55 * k, 0, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.stroke();
+      }
+      // 頂上のツノ
+      if (H > 3) {
+        const x = cx + sway(H) * k;
+        const y = rimY - H * k;
+        ctx.fillStyle = '#fffdf8';
+        ctx.beginPath();
+        ctx.moveTo(x - 7 * k, y + 4 * k);
+        ctx.quadraticCurveTo(x - 2 * k, y - 4 * k, x + 2 * k, y - 9 * k);
+        ctx.quadraticCurveTo(x + 4 * k, y - 2 * k, x + 7 * k, y + 4 * k);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // キャラメルソース
+      if (opt.drizzle > 0 && H > 3) {
+        ctx.strokeStyle = 'rgba(196,120,40,0.92)';
+        ctx.lineWidth = Math.max(1, 2 * k);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        const steps = Math.floor(10 * opt.drizzle);
+        for (let s = 0; s <= steps; s++) {
+          const yy = H * (1 - s / 10);
+          const taper = 1 - 0.62 * (yy / WHIP_MAX);
+          const w = (topW * 0.5) * Math.max(0.2, taper) * 0.85;
+          const x = cx + (s % 2 ? w : -w) * k + sway(yy) * k;
+          const y = rimY - yy * k;
+          if (s === 0) ctx.moveTo(cx + sway(H) * k, rimY - H * k); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // あふれたクリームがカップの外を垂れる
+      if (opt.burst) {
+        ctx.fillStyle = '#fffdf8';
+        const drip = Math.min(1, opt.burstT / 1.2);
+        for (const [dx, len] of [[-topW * 0.48, 40], [topW * 0.5, 55], [-topW * 0.2, 25]]) {
+          const x = cx + dx * k;
+          ctx.beginPath();
+          ctx.ellipse(x, rimY + len * drip * 0.5 * k, 5 * k, (4 + len * drip * 0.5) * k, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // ノズル（しぼっている間、山の上）
+      if (opt.nozzle) {
+        const x = cx + sway(H) * k;
+        const y = rimY - H * k - 12 * k;
+        ctx.fillStyle = '#d9d9d9';
+        ctx.beginPath();
+        ctx.moveTo(x - 4 * k, y);
+        ctx.lineTo(x + 4 * k, y);
+        ctx.lineTo(x + 9 * k, y - 16 * k);
+        ctx.lineTo(x - 9 * k, y - 16 * k);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        roundRect(ctx, x - 22 * k, y - 60 * k, 44 * k, 46 * k, 14 * k);
+        ctx.fill();
+      }
+    }
+
+    // 自分のカップの揺れ。限界にどれだけ近いか（押した時間 ÷ 限界）で大きくなる。
+    // 揺れからだけ止めどきが分かるようにするため、自分のカップにだけ使う
+    function myAmp(frac, t) {
+      const r = Math.min(1, frac * MAX_HOLD_MS / S.limitMs);
+      return 16 * Math.pow(r, 3) * (1 + 0.15 * Math.sin(t * 1.7) * Math.sin(t * 0.6));
+    }
+    // ほかの人のカップの揺れは高さだけで決める。限界との距離で揺らすと、
+    // 自分が止める前に相手の揺れから限界が分かってしまう
+    function otherAmp(frac) { return 3 * frac; }
+
+    function drawScene(now) {
+      if (scene.w === 0) return;
+      const ctx = $('scene').getContext('2d');
+      const { w, h, dpr } = scene;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      const t = now / 1000;
+
+      // 店内（OBS モードでは描かず、配信画面に重ねる）
+      if (!document.body.classList.contains('transparent')) {
+        const wall = ctx.createLinearGradient(0, 0, 0, h);
+        wall.addColorStop(0, '#1d3a30');
+        wall.addColorStop(1, '#122520');
+        ctx.fillStyle = wall;
+        ctx.fillRect(0, 0, w, h);
+        const lamp = ctx.createRadialGradient(w / 2, 0, 0, w / 2, 0, h * 0.8);
+        lamp.addColorStop(0, 'rgba(255,214,150,0.28)');
+        lamp.addColorStop(1, 'rgba(255,214,150,0)');
+        ctx.fillStyle = lamp;
+        ctx.fillRect(0, 0, w, h);
+        const counterY = h * 0.86;
+        const wood = ctx.createLinearGradient(0, counterY, 0, h);
+        wood.addColorStop(0, '#8a5a34');
+        wood.addColorStop(1, '#5a3a22');
+        ctx.fillStyle = wood;
+        ctx.fillRect(0, counterY, w, h - counterY);
+      }
+      if (!S.canPlay) return;
+
+      const k = Math.min(h / (CUP_H + WHIP_MAX + 70), w / 130);
+      const by = h * 0.86;
+      const me = S.players.find((p) => p.id === S.me);
+      const v = viewOf(S.me, now, true);
+      const doneMs = stopped(S.me) ? S.stops[S.me] : null;
+      const showTruth = canSeeTruth();
+      drawCup(ctx, w / 2, by, k, {
+        frac: v.frac,
+        amp: v.done ? 0 : myAmp(v.frac, t),
+        t,
+        burst: v.burst,
+        burstT: v.burstT,
+        drizzle: doneMs !== null && !isBurst(doneMs) && doneMs > 0 ? Math.min(1, (now - S.stopAt[S.me]) / 800) : 0,
+        limit: showTruth && doneMs !== null ? S.limitMs / MAX_HOLD_MS : null,
+        name: me.name,
+        nozzle: S.holding,
+      });
+    }
+
+    function makeMini() {
+      const c = document.createElement('canvas');
+      c.className = 'mini';
+      c.width = 96;
+      c.height = 120;
+      return c;
+    }
+
+    function drawMini(canvas, id, now, truth, withLimit) {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      const v = viewOf(id, now, truth);
+      drawCup(ctx, w / 2, h - 6, h / (CUP_H + WHIP_MAX + 14), {
+        frac: v.frac,
+        amp: v.done ? 0 : otherAmp(v.frac),
+        t: now / 1000,
+        burst: v.burst,
+        burstT: v.burstT,
+        drizzle: v.done && !v.burst && v.ms > 0 ? 1 : 0,
+        limit: withLimit ? S.limitMs / MAX_HOLD_MS : null,
+        name: null,
+        nozzle: false,
+      });
+    }
+
+    function statusOf(id, truth) {
+      if (stopped(id)) {
+        if (S.missing[id]) return { text: '記録なし', burst: false };
+        if (S.stops[id] === 0) return { text: '押さず', burst: false };
+        if (truth && isBurst(S.stops[id])) return { text: 'あふれ', burst: true };
+        return { text: '停止', burst: false };
+      }
+      if (S.presses[id] !== undefined) return { text: 'しぼり中', burst: false };
+      return { text: '待機', burst: false };
+    }
+
+    function nameOf(id) { return S.players.find((p) => p.id === id).name; }
+
+    function buildOthers() {
+      const box = $('others');
+      box.textContent = '';
+      S.players.filter((p) => p.id !== S.me).forEach((p) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'other';
+        wrap.dataset.player = p.id;
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = p.name;
+        const status = document.createElement('div');
+        status.className = 'status';
+        status.textContent = '待機';
+        wrap.append(makeMini(), name, status);
+        box.append(wrap);
+      });
+    }
+
+    function render(now) {
+      if (Hitsumabushi.phase === 'over') return;
+      let msg = '';
+      let remain = PRESS_WINDOW_MS;
+      if (S.stage === 'countdown') msg = 'よーい…';
+      else if (S.stage === 'play') {
+        remain = Math.max(0, S.deadline - now);
+        if (!S.canPlay) msg = 'みんながしぼっています';
+        else if (S.holding) msg = 'しぼっています…';
+        else if (stopped(S.me)) msg = isBurst(S.stops[S.me]) ? 'あふれた…' : S.stops[S.me] === 0 ? '時間切れ' : 'ストップ！ ほかの人を待っています';
+        else msg = '長押しでホイップをしぼる（スペースキーでも）';
+      } else {
+        remain = 0;
+        msg = '結果発表';
+      }
+      if (S.holding || stopped(S.me)) remain = 0;
+      $('timer').textContent = (remain / 1000).toFixed(1);
+      $('stageMsg').textContent = msg;
+      const btn = $('holdBtn');
+      btn.disabled = !(S.canPlay && S.stage === 'play' && !stopped(S.me));
+      btn.classList.toggle('holding', S.holding);
+
+      drawScene(now);
+      const truth = canSeeTruth();
+      document.querySelectorAll('.other').forEach((el) => {
+        const id = el.dataset.player;
+        drawMini(el.querySelector('canvas'), id, now, truth, truth && stopped(id));
+        const st = statusOf(id, truth);
+        const status = el.querySelector('.status');
+        if (status.textContent !== st.text) status.textContent = st.text;
+        el.classList.toggle('burst', st.burst);
+      });
+    }
+
+    function showResult() {
+      const now = Date.now();
+      const box = $('resultBox');
+      box.textContent = '';
+      const winner = winnerOf();
+      const h = document.createElement('h2');
+      h.textContent = winner === null ? '引き分け' : nameOf(winner) + ' の勝ち！';
+      box.append(h);
+      // 得点の高い順。同じ得点は席順
+      const ids = S.players.map((p) => p.id);
+      ids.slice().sort((a, b) => (scoreOf(S.stops[b]) - scoreOf(S.stops[a])) || (ids.indexOf(a) - ids.indexOf(b))).forEach((id) => {
+        const ms = S.stops[id];
+        const row = document.createElement('div');
+        row.className = 'row' + (ms > 0 && isBurst(ms) ? ' burst' : '');
+        row.dataset.player = id;
+        const mini = makeMini();
+        drawMini(mini, id, now + 2000, true, true);
+        const who = document.createElement('div');
+        who.className = 'who';
+        who.textContent = nameOf(id) + (id === S.me ? '（あなた）' : '');
+        const grade = document.createElement('div');
+        grade.className = 'grade';
+        grade.textContent = S.missing[id] ? '—' : gradeOf(ms);
+        const pts = document.createElement('div');
+        pts.className = 'pts';
+        pts.textContent = scoreOf(ms).toFixed(1) + '%';
+        row.append(mini, who, grade, pts);
+        box.append(row);
+      });
+      $('overlay').hidden = false;
+    }
+
+    Hitsumabushi.init({
+      onCreateMatch: () => {
+        const arena = $('arena');
+        const btn = $('holdBtn');
+        // 長押しの場所での指の操作でページがスクロール・ズームしないようにする
+        for (const el of [arena, btn]) {
+          el.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+          el.addEventListener('contextmenu', (e) => e.preventDefault());
+          el.addEventListener('pointerdown', (e) => {
+            if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
+            e.preventDefault();
+            startHold();
+          });
+          el.addEventListener('pointerup', endHold);
+          el.addEventListener('pointercancel', endHold);
+        }
+        document.addEventListener('keydown', (e) => {
+          if (e.code !== 'Space' && e.key !== ' ') return;
+          e.preventDefault();
+          if (!e.repeat) startHold();
+        });
+        document.addEventListener('keyup', (e) => {
+          if (e.code !== 'Space' && e.key !== ' ') return;
+          e.preventDefault();
+          endHold();
+        });
+        // タブを離れると指を離したことが届かないことがあるので、そこで止める
+        window.addEventListener('blur', endHold);
+
+        new ResizeObserver(fitScene).observe(arena);
+
+        const loop = () => {
+          tick(Date.now());
+          requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+      },
+
+      // 毎試合（リマッチ含む）の開始時。試合の状態・タイマー・表示はすべてここで作り直す
+      onStartMatch: (config) => {
+        clearTimers();
+        S = newState(config);
+        document.body.classList.toggle('spectating', !S.canPlay);
+        document.body.classList.toggle('transparent', !!config.isObsMode);
+        $('overlay').hidden = true;
+        $('resultBox').textContent = '';
+        buildOthers();
+        if (Hitsumabushi.isGameMaster()) planCpu();
+        const queued = pending.filter((q) => q.p.m === S.match);
+        pending = pending.filter((q) => q.p.m > S.match);
+        queued.forEach((q) => applyPacket(q.p, q.senderId));
+        render(Date.now());
+      },
+
+      onGameData: (p, senderId) => {
+        if (Hitsumabushi.phase === 'over') return;
+        if (!p || typeof p.m !== 'number') return;
+        if (!S || p.m > S.match) { pending.push({ p, senderId }); return; }
+        if (p.m < S.match) return; // 前の試合の残り
+        applyPacket(p, senderId);
+      },
+    });
+  </script>
+</body>
+</html>

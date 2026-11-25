@@ -1,0 +1,17 @@
+{
+  "$schema": "https://milightpartner.jp/schemas/game-manifest-1.json",
+  "gameId": "girigiri-whip",
+  "title": "ギリギリ！ホイップ盛り",
+  "version": "0.1.0",
+  "players": {
+    "min": 2,
+    "max": 8,
+    "type": "variable",
+    "allowCpuFill": true
+  },
+  "creator": "milightpartner",
+  "resultModel": {
+    "type": "single_winner",
+    "allowTie": true
+  }
+}
