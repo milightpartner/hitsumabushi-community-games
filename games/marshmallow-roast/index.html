@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>マシュマロ焼き</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overscroll-behavior: none; overflow: hidden; height: 100%; }
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+      background-color: #0a0b10;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+    }
+    body.transparent { background-color: transparent !important; }
+    :root:has(body.transparent) { background-color: transparent !important; }
+
+    .app {
+      width: 100%;
+      max-width: 640px;
+      height: 100%;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card {
+      background: rgba(22, 26, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 16px;
+    }
+
+    .hud {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 14px;
+      font-size: 0.95rem;
+    }
+    .hud .round { color: #00f0ff; }
+    .hud .timer { font-size: 1.4rem; font-variant-numeric: tabular-nums; color: #ffe600; }
+    .hud .total { color: #39ff14; }
+
+    .spectator-badge {
+      display: none;
+      align-self: center;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(255, 230, 0, 0.12);
+      border: 1px solid #ffe600;
+      color: #ffe600;
+      font-size: 0.85rem;
+    }
+    body.spectating .spectator-badge { display: inline-block; }
+    body.spectating .play-area { pointer-events: none; }
+    body.spectating .mine { display: none; }
+
+    /* 焚き火の場面。左右のドラッグで回すので、ブラウザのスクロールやズームを止める */
+    .arena {
+      flex: 1;
+      min-height: 200px;
+      position: relative;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      cursor: grab;
+    }
+    .arena:active { cursor: grabbing; }
+    .arena canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .stage-msg {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 1rem;
+      color: #e2e8f0;
+      text-shadow: 0 1px 4px #000;
+      pointer-events: none;
+    }
+
+    .others {
+      flex-shrink: 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      padding: 6px 8px;
+    }
+    .others:empty { display: none; }
+    .other {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 72px;
+      font-size: 0.7rem;
+      color: #cbd5e1;
+    }
+    .other .name { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .other.done .name { color: #39ff14; }
+    canvas.mini { width: 48px; height: 48px; display: block; }
+
+    .controls { flex-shrink: 0; display: flex; justify-content: center; padding: 8px; }
+    .done-btn {
+      min-width: 160px;
+      min-height: 48px;
+      padding: 10px 24px;
+      border-radius: 999px;
+      border: 2px solid #ffe600;
+      background: rgba(255, 230, 0, 0.15);
+      color: #ffe600;
+      font-size: 1.1rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .done-btn:disabled { opacity: 0.35; cursor: default; }
+
+    /* 結果発表は画面の下側に出す。上には引き上げた自分のマシュマロが見えていて、発表中も回せる */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 16px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .overlay[hidden] { display: none; }
+    .result {
+      width: 100%;
+      max-width: 420px;
+      max-height: 55%;
+      pointer-events: auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 16px;
+    }
+    .result h2 { font-size: 1.1rem; color: #00f0ff; text-align: center; margin-bottom: 10px; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+    .row .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .pts { font-variant-numeric: tabular-nums; color: #ffe600; }
+    .row .sub { font-size: 0.75rem; color: #94a3b8; }
+    .row.missing .pts { color: #ff007f; }
+    .row canvas.mini { width: 40px; height: 40px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="hud card">
+      <span class="round" id="roundLabel">1 / 3 個目</span>
+      <span class="timer" id="timer">20.0</span>
+      <span class="total mine" id="myTotal">合計 0</span>
+    </header>
+    <div class="spectator-badge">👀 観戦中</div>
+
+    <!-- 操作可能なUIは .play-area の中に置く（観戦時に自動でロックされる） -->
+    <main class="arena card play-area mine" id="arena">
+      <canvas id="scene"></canvas>
+      <div class="stage-msg" id="stageMsg">まもなく始まります</div>
+    </main>
+
+    <div class="others card" id="others"></div>
+
+    <div class="controls play-area mine">
+      <button class="done-btn" id="doneBtn" disabled>完成！</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay" hidden>
+    <div class="result card" id="resultBox"></div>
+  </div>
+
+  <!--
+    ひつまぶしSDKを公開URLから読み込む。ビルドもバンドラも不要で、
+    開発ハーネス(`npx hitsumabushi dev`)でも、静的ホストへ置いた本番でも、
+    この1行がそのまま動く。グローバルの `Hitsumabushi` として利用できる。
+  -->
+  <script src="https://milightpartner.jp/sdk/0.29.2/hitsumabushi-sdk.js"></script>
+  <script>
+    // ---- ルールの数値（企画メモの「決めていないこと」は試作で調整する） ----
+    const FACES = 8;               // マシュマロの周りを分けた面の数
+    const ROUNDS = 3;              // 1試合で焼く個数
+    const ROUND_MS = 20000;        // 1個の制限時間
+    const COUNTDOWN_MS = 1500;     // 1個ごとの「よーい」
+    const REVEAL_MS = 3500;        // 1個ごとの結果発表
+    const GRACE_MS = 3000;         // 進行役が結果を待つ猶予（通信の遅れ分）
+    const BASE_RATE = 20;          // 火に真正面を向けた面が1秒に焼ける量（100で焦げ）
+    const FLARE_MULT = 1.8;        // 火が強いときの倍率
+    const FLARE_MS = 2500;         // 火が強い時間
+    const WARN_MS = 1000;          // 火が強くなる前の予告
+    const SYNC_MS = 200;           // 自分の焼け具合を相手に送る間隔（秒5回）
+    const DEG_PER_PX = 0.9;        // ドラッグ1pxで回る角度
+    const KEY_STEP_DEG = 15;       // 矢印キー1回で回る角度
+    const ON_FIRE_MS = 1500;       // 焦げた面に火がついて燃えている時間（演出）
+
+    // 面の焼け具合 → 点数（企画メモの曲線）。100（焦げ）は0点
+    const SCORE_CURVE = [[0, 0], [20, 10], [40, 35], [60, 75], [70, 100], [80, 85], [90, 50], [99, 20], [100, 0]];
+    // 面の焼け具合 → 色
+    const COLOR_STOPS = [[0, [255, 250, 242]], [30, [248, 228, 190]], [55, [238, 186, 105]], [70, [216, 146, 58]], [85, [160, 92, 36]], [97, [74, 42, 20]], [100, [28, 20, 15]]];
+
+    const $ = (id) => document.getElementById(id);
+
+    // ---- 試合の状態（onStartMatch で毎回作り直す） ----
+    let S = null;
+    let timers = [];
+    let lastTick = null;
+
+    function later(ms, fn) { timers.push(setTimeout(fn, ms)); }
+    function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+    function newState(config) {
+      const players = config.players.map((p) => ({ id: p.id, name: p.name }));
+      const me = config.localPlayerId;
+      const totals = {};
+      players.forEach((p) => { totals[p.id] = { sum: 0, burnt: 0, last: 0 }; });
+      return {
+        match: config.matchNumber,
+        players,
+        me,
+        canPlay: !Hitsumabushi.isSpectator() && me !== null && players.some((p) => p.id === me),
+        round: 0,
+        stage: 'waiting',       // waiting / countdown / roast / reveal / final
+        roastStart: 0,
+        endAt: 0,
+        flares: [],
+        faces: new Array(FACES).fill(0),
+        burntAt: new Array(FACES).fill(null), // 面が焦げた時刻（火がつく演出用）
+        angle: 0,               // 度。0 のとき面0が火（真下）を向いている
+        myDone: false,
+        doneAt: 0,              // 完成した時刻（火から引き上げる演出用）
+        lastSync: 0,
+        others: {},             // id -> { faces, angle, done }
+        totals,
+        results: {},            // 進行役が集めている、今の1個の結果 id -> faces
+        revealed: 0,            // 進行役が発表まで済ませた個数
+      };
+    }
+
+    // ---- 焼け具合と点数 ----
+    function lerpTable(table, v) {
+      for (let i = 1; i < table.length; i++) {
+        if (v <= table[i][0]) {
+          const [x0, y0] = table[i - 1];
+          const [x1, y1] = table[i];
+          return y0 + (y1 - y0) * (v - x0) / (x1 - x0);
+        }
+      }
+      return table[table.length - 1][1];
+    }
+    function faceScore(v) { return v >= 100 ? 0 : lerpTable(SCORE_CURVE, v); }
+    function marshScore(faces) { return faces.reduce((a, v) => a + faceScore(v), 0) / faces.length; }
+    function burntCount(faces) { return faces.filter((v) => v >= 100).length; }
+
+    function faceRgb(v) {
+      for (let i = 1; i < COLOR_STOPS.length; i++) {
+        if (v <= COLOR_STOPS[i][0]) {
+          const [x0, c0] = COLOR_STOPS[i - 1];
+          const [x1, c1] = COLOR_STOPS[i];
+          const t = (v - x0) / (x1 - x0);
+          return c0.map((c, k) => c + (c1[k] - c) * t);
+        }
+      }
+      return COLOR_STOPS[COLOR_STOPS.length - 1][1];
+    }
+
+    const wrap360 = (d) => ((d % 360) + 360) % 360;
+
+    // 面 i が今どれだけ火に向いているか（真正面 1、45度ずれで 0.5、横向き以降 0）
+    function heatOf(i, angle) {
+      const d = wrap360(angle + i * 360 / FACES + 180) - 180;
+      const c = Math.cos(d * Math.PI / 180);
+      return c > 0 ? c * c : 0;
+    }
+
+    function flareAt(elapsed) {
+      return S.flares.some((f) => elapsed >= f.at && elapsed < f.at + FLARE_MS);
+    }
+    function flareSoon(elapsed) {
+      return S.flares.some((f) => elapsed >= f.at - WARN_MS && elapsed < f.at);
+    }
+
+    // ---- 描画 ----
+    // 串は自分の手元（画面の手前）から奥の火へ、少し下向きに伸びている。マシュマロは手前の切り口が
+    // 正面に見え、その下に火に向いた側面がのぞく。表面の向き psi は真下（火の側）が 0 度で、
+    // 画面上で時計回りに増える。面 i は psi = angle + 45*i にある
+    function valueAt(faces, angle, psi) {
+      const u = wrap360(psi - angle) / (360 / FACES);
+      const i0 = Math.floor(u) % FACES;
+      const t = u - Math.floor(u);
+      return faces[i0] + (faces[(i0 + 1) % FACES] - faces[i0]) * t;
+    }
+
+    // 画面上の向き（psi 度、真下が 0、時計回り）の単位ベクトル
+    function dirOf(psi) {
+      const a = Math.PI / 2 + psi * Math.PI / 180;
+      return [Math.cos(a), Math.sin(a)];
+    }
+
+    function shade(rgb, k, warm) {
+      const c = rgb.map((ch, i) => Math.min(255, ch * k + [255, 140, 50][i] * warm));
+      return 'rgb(' + c.map(Math.round).join(',') + ')';
+    }
+
+    const rgbStr = (c, a) => 'rgba(' + c.map(Math.round).join(',') + ',' + (a === undefined ? 1 : a) + ')';
+
+    // 手前の切り口の中心 (cx, cy)・半径 R。(ux, uy) は串の進む向き（手元 → 先端）の画面上の単位ベクトルで、
+    // マシュマロの軸もこの向き。奥の切り口はその向きにずれ、遠いぶん小さい。
+    // fireLight: 下からの火の照り返しの強さ（0〜1）
+    function drawMarsh(ctx, cx, cy, R, faces, angle, fireLight, ux, uy) {
+      const D = R * 0.6;           // 奥の切り口までのずれ
+      const Rf = R * 0.82;         // 奥の切り口の半径
+      const fx = cx + ux * D;
+      const fy = cy + uy * D;
+      const psiU = Math.atan2(-ux, uy) * 180 / Math.PI; // 軸の向きを表面の向き（psi）で表したもの
+
+      // 側面。軸の向きの側だけが、手前の切り口の外にのぞく
+      const step = 3;
+      for (let psi = psiU - 100; psi < psiU + 100; psi += step) {
+        const [ax, ay] = dirOf(psi);
+        const [bx, by] = dirOf(psi + step + 0.6);
+        const v = valueAt(faces, angle, psi + step / 2);
+        const c = Math.cos((psi + step / 2) * Math.PI / 180);
+        const edge = Math.cos((psi + step / 2 - psiU) * Math.PI / 180);
+        ctx.fillStyle = shade(faceRgb(v), 0.72 + 0.18 * edge, fireLight * 0.35 * Math.max(0, c));
+        ctx.beginPath();
+        ctx.moveTo(cx + ax * R, cy + ay * R);
+        ctx.lineTo(cx + bx * R, cy + by * R);
+        ctx.lineTo(fx + bx * Rf, fy + by * Rf);
+        ctx.lineTo(fx + ax * Rf, fy + ay * Rf);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // 手前の切り口。外周が各面の焼き色で、中はふんわり白い
+      const rim = ctx.createConicGradient(Math.PI / 2, cx, cy);
+      for (let k = 0; k <= 36; k++) {
+        const psi = k * 10;
+        const v = valueAt(faces, angle, psi);
+        const c = Math.cos(psi * Math.PI / 180);
+        rim.addColorStop(k / 36, shade(faceRgb(v), 0.97, fireLight * 0.22 * Math.max(0, c)));
+      }
+      ctx.fillStyle = rim;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fill();
+      const core = ctx.createRadialGradient(cx - R * 0.1, cy - R * 0.1, 0, cx, cy, R);
+      core.addColorStop(0, 'rgba(255,252,247,1)');
+      core.addColorStop(0.35, 'rgba(255,247,236,0.95)');
+      core.addColorStop(0.55, 'rgba(255,240,222,0.45)');
+      core.addColorStop(0.72, 'rgba(255,236,214,0)');
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fill();
+      // ふくらみのやわらかい光
+      const soft = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.4, 0, cx - R * 0.35, cy - R * 0.4, R * 0.7);
+      soft.addColorStop(0, 'rgba(255,255,255,0.55)');
+      soft.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = soft;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 焼き目のぷつぷつ。表面に貼りついていて、回すと一緒に回る。つやのある小さな泡
+      for (let k = 0; k < 16; k++) {
+        const psi = angle + k * 360 / 16 + 11;
+        const v = valueAt(faces, angle, psi);
+        if (v < 35 || v >= 100) continue;
+        const [dx, dy] = dirOf(psi);
+        const r = R * (0.85 + ((k * 37) % 9) / 100);
+        const px = cx + dx * r;
+        const py = cy + dy * r;
+        const a = Math.min(0.5, (v - 35) / 60);
+        ctx.fillStyle = rgbStr(faceRgb(Math.min(99, v + 10)), a);
+        ctx.beginPath();
+        ctx.arc(px, py, R * 0.05, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,' + a + ')';
+        ctx.beginPath();
+        ctx.arc(px - R * 0.015, py - R * 0.015, R * 0.015, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // とろけて垂れるしずく（きつね色以上になった面が下を向いているとき）
+      for (let k = 0; k < 3; k++) {
+        const psi = angle + 20 + k * 120;
+        const down = Math.cos(psi * Math.PI / 180);
+        const v = valueAt(faces, angle, psi);
+        if (down < 0.5 || v < 55 || v >= 100) continue;
+        const [dx, dy] = dirOf(psi);
+        const px = cx + dx * R * 0.95;
+        const py = cy + dy * R * 0.95;
+        const len = R * 0.22 * Math.min(1, (v - 55) / 30) * down;
+        const wd = R * 0.07;
+        ctx.fillStyle = rgbStr(faceRgb(v));
+        ctx.beginPath();
+        ctx.moveTo(px - wd, py - wd);
+        ctx.quadraticCurveTo(px - wd, py + len * 0.6, px, py + len);
+        ctx.quadraticCurveTo(px + wd, py + len * 0.6, px + wd, py - wd);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(px - wd * 0.3, py + len * 0.55, wd * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 溶けたつや（左上の外周）。焼けた面ほど強く光る
+      const gv = valueAt(faces, angle, 135);
+      if (gv > 40 && gv < 95) {
+        const a = 0.25 + 0.35 * Math.min(1, (gv - 40) / 30);
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(255,255,255,' + (a * 0.5) + ')';
+        ctx.lineWidth = R * 0.14;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * 0.86, Math.PI * 1.05, Math.PI * 1.4);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,' + a + ')';
+        ctx.lineWidth = R * 0.05;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * 0.88, Math.PI * 1.1, Math.PI * 1.35);
+        ctx.stroke();
+      }
+      // 輪郭をやわらかく締める
+      ctx.strokeStyle = 'rgba(140,80,30,0.22)';
+      ctx.lineWidth = Math.max(1, R * 0.03);
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 手元 (hx, hy) から切り口の中心 (cx, cy) へ向かう単位ベクトル。串とマシュマロの軸の向き
+    function axisOf(hx, hy, cx, cy) {
+      const len = Math.hypot(cx - hx, cy - hy);
+      return [(cx - hx) / len, (cy - hy) / len];
+    }
+
+    // 手元（画面の外の下）から切り口の中心へ。手前ほど太い
+    function drawStick(ctx, hx, hy, cx, cy, wNear, wFar) {
+      const len = Math.hypot(cx - hx, cy - hy);
+      const nx = -(cy - hy) / len;
+      const ny = (cx - hx) / len;
+      ctx.fillStyle = '#8a5a2e';
+      ctx.beginPath();
+      ctx.moveTo(hx + nx * wNear / 2, hy + ny * wNear / 2);
+      ctx.lineTo(cx + nx * wFar / 2, cy + ny * wFar / 2);
+      ctx.lineTo(cx - nx * wFar / 2, cy - ny * wFar / 2);
+      ctx.lineTo(hx - nx * wNear / 2, hy - ny * wNear / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,200,140,0.25)'; // 火に照らされた片側
+      ctx.beginPath();
+      ctx.moveTo(hx + nx * wNear / 2, hy + ny * wNear / 2);
+      ctx.lineTo(cx + nx * wFar / 2, cy + ny * wFar / 2);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(hx, hy);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function puffOf(faces) {
+      const avg = faces.reduce((a, v) => a + Math.min(v, 80), 0) / faces.length;
+      return 1 + 0.14 * avg / 80; // 焼けるほどぷくっと膨らむ
+    }
+
+    // 小さい表示（ほかの人・結果発表）。切り口の外周で全面の焼き色が見える
+    function drawMini(canvas, faces, angle) {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      const R = h * 0.27 * puffOf(faces);
+      const [ux, uy] = axisOf(w * 0.66, h + 4, w / 2, h * 0.42);
+      drawMarsh(ctx, w / 2, h * 0.42, R, faces, angle, 0, ux, uy);
+      drawStick(ctx, w * 0.66, h + 4, w / 2, h * 0.42, R * 0.35, R * 0.14);
+    }
+
+    function makeMini() {
+      const c = document.createElement('canvas');
+      c.className = 'mini';
+      c.width = 96;
+      c.height = 96;
+      return c;
+    }
+
+    // --- 自分の焚き火の場面（canvas）。粒子は見た目だけの状態で、試合の結果には関わらない ---
+    const scene = { w: 0, h: 0, dpr: 1, sparks: [], puffs: [] };
+
+    function fitScene() {
+      const arena = $('arena');
+      const w = arena.clientWidth;
+      const h = arena.clientHeight;
+      if (w === 0 || h === 0) return; // 非表示の間は測れない。表示されたら ResizeObserver がまた呼ぶ
+      scene.dpr = window.devicePixelRatio || 1;
+      scene.w = w;
+      scene.h = h;
+      const c = $('scene');
+      c.width = Math.round(w * scene.dpr);
+      c.height = Math.round(h * scene.dpr);
+    }
+
+    function layout() {
+      const { w, h } = scene;
+      const R = Math.min(h * 0.17, w * 0.24) * puffOf(S.faces);
+      const cx = w * 0.5;
+      const cy = h * 0.36;
+      // bottom: 奥の切り口の下端（マシュマロのいちばん火に近いところ）
+      return { R, cx, cy, bottom: cy + R * 0.75 + R * 0.8, fireX: cx, fireBase: h * 0.88 };
+    }
+
+    function fireLevel(now) {
+      if (S.stage !== 'roast') return { mult: 0.8, warn: false };
+      const e = now - S.roastStart;
+      return { mult: flareAt(e) ? 1.45 : 1, warn: flareSoon(e) };
+    }
+
+    function updateFx(dt, now) {
+      if (scene.w === 0) return;
+      const { R, cx, cy, fireX, fireBase } = layout();
+      const fire = fireLevel(now);
+      // 火の粉
+      if (Math.random() < dt * 14 * fire.mult) {
+        scene.sparks.push({ x: fireX + (Math.random() - 0.5) * R * 1.6, y: fireBase - R * 0.6, vx: (Math.random() - 0.5) * 30, vy: -60 - Math.random() * 80, life: 1 + Math.random() });
+      }
+      // 湯気・煙・焦げた面の火
+      if (S.stage === 'roast' && S.canPlay && !S.myDone) {
+        for (let i = 0; i < FACES; i++) {
+          const h = heatOf(i, S.angle);
+          const v = S.faces[i];
+          if (h < 0.3) continue;
+          const smoke = v >= 85;
+          if (Math.random() < dt * h * (smoke ? 12 : 5)) {
+            // 外周の上半分のどこかから立ちのぼる
+            const [dx, dy] = dirOf(90 + Math.random() * 180);
+            scene.puffs.push({ x: cx + dx * R, y: cy + dy * R * 0.9, vx: dx * 10, vy: -25 - Math.random() * 20, life: 0, max: 1.4, size: R * (smoke ? 0.16 : 0.09), kind: smoke ? 'smoke' : 'steam' });
+          }
+        }
+      }
+      for (const p of scene.sparks) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+      scene.sparks = scene.sparks.filter((p) => p.life > 0);
+      for (const p of scene.puffs) { p.x += p.vx * dt; p.y += p.vy * dt; p.life += dt; p.size += dt * 10; }
+      scene.puffs = scene.puffs.filter((p) => p.life < p.max);
+    }
+
+    function drawFlame(ctx, x, base, w, hgt, sway, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2, base);
+      ctx.quadraticCurveTo(x - w / 2, base - hgt * 0.55, x + sway, base - hgt);
+      ctx.quadraticCurveTo(x + w / 2, base - hgt * 0.55, x + w / 2, base);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawScene(now) {
+      if (scene.w === 0) return;
+      const c = $('scene');
+      const ctx = c.getContext('2d');
+      const { w, h, dpr } = scene;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      const { R, cx, cy, bottom, fireX, fireBase } = layout();
+      const fire = fireLevel(now);
+      const t = now / 1000;
+      const flick = 0.9 + 0.1 * Math.sin(t * 13) * Math.sin(t * 7.3);
+
+      // 夜空（OBS モードでは描かず、配信画面に重ねる）
+      if (!document.body.classList.contains('transparent')) {
+        const sky = ctx.createLinearGradient(0, 0, 0, h);
+        sky.addColorStop(0, '#070912');
+        sky.addColorStop(1, '#1a1020');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        for (let k = 0; k < 24; k++) {
+          ctx.fillRect((k * 97) % w, (k * 53) % (h * 0.45), 1.2, 1.2);
+        }
+      }
+      // 火の明かり
+      const glowR = R * 4.2 * fire.mult * flick;
+      const glow = ctx.createRadialGradient(fireX, fireBase - R, 0, fireX, fireBase - R, glowR);
+      glow.addColorStop(0, fire.warn ? 'rgba(255,60,120,0.45)' : 'rgba(255,140,40,0.4)');
+      glow.addColorStop(1, 'rgba(255,100,30,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, w, h);
+
+      // 薪
+      ctx.save();
+      ctx.translate(fireX, fireBase);
+      for (const rot of [-0.28, 0.28]) {
+        ctx.save();
+        ctx.rotate(rot);
+        ctx.fillStyle = '#7a4a26';
+        ctx.beginPath();
+        ctx.roundRect(-R * 1.6, -R * 0.2, R * 3.2, R * 0.4, R * 0.2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,170,90,0.35)'; // 火に照らされた上側
+        ctx.fillRect(-R * 1.4, -R * 0.2, R * 2.8, R * 0.08);
+        ctx.fillStyle = '#d9a066';
+        ctx.beginPath();
+        ctx.ellipse(rot < 0 ? -R * 1.6 : R * 1.6, 0, R * 0.12, R * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+
+      // 炎。先がマシュマロの下をなめる高さ。火が強いときは大きく伸び上がる
+      const reach = (fireBase - bottom) + R * 0.3;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const tongues = [[-0.95, 0.5, 1.3], [0.9, 0.55, 2.1], [0, 1, 0], [-0.45, 0.8, 3.4], [0.45, 0.75, 4.6]];
+      for (const [off, hs, ph] of tongues) {
+        const hgt = reach * hs * fire.mult * (0.85 + 0.15 * Math.sin(t * 9 + ph));
+        const sway = Math.sin(t * 5 + ph) * R * 0.25;
+        const x = fireX + off * R;
+        drawFlame(ctx, x, fireBase, R * 1.1, hgt, sway, 'rgba(255,70,20,0.5)');
+        drawFlame(ctx, x, fireBase, R * 0.75, hgt * 0.75, sway * 0.8, 'rgba(255,150,30,0.55)');
+        drawFlame(ctx, x, fireBase, R * 0.4, hgt * 0.45, sway * 0.5, 'rgba(255,230,120,0.65)');
+      }
+      ctx.restore();
+
+      // 串とマシュマロ
+      if (S.canPlay) {
+        // 完成したら火から引き上げて、手元でじっくり眺められるようにする
+        // 上げる高さは、切り口の上端が画面上部の案内文（約40px）にかからない範囲まで
+        const lift = S.myDone ? Math.min(1, (now - S.doneAt) / 400) * Math.max(0, Math.min(R * 0.8, cy - R - 40)) : 0;
+        const my = cy - lift;
+        // 串は画面の右下の外（自分の手元）から伸び、マシュマロの軸と一直線に刺さっている。
+        // 真下から刺すと火に向いた外周（いちばん焼ける所）を串が隠すので、右寄りから刺す
+        const hx = cx + w * 0.5;
+        const hy = h + 30;
+        const [ux, uy] = axisOf(hx, hy, cx, my);
+        drawMarsh(ctx, cx, my, R, S.faces, S.angle, S.stage === 'roast' && !S.myDone ? fire.mult * flick : 0.3, ux, uy);
+        drawStick(ctx, hx, hy, cx, my, Math.max(10, R * 0.4), Math.max(4, R * 0.14));
+        // 焦げた面に火がつく
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        S.burntAt.forEach((at, i) => {
+          if (at === null || now - at > ON_FIRE_MS) return;
+          const [dx, dy] = dirOf(S.angle + i * 360 / FACES);
+          const k = 1 - (now - at) / ON_FIRE_MS;
+          const px = cx + dx * R;
+          const py = my + dy * R;
+          for (const off of [-0.15, 0.15]) {
+            const hgt = R * 0.8 * k * (0.8 + 0.2 * Math.sin(t * 20 + off * 9));
+            drawFlame(ctx, px + off * R, py, R * 0.3, hgt, Math.sin(t * 8 + off) * R * 0.1, 'rgba(255,120,30,0.75)');
+            drawFlame(ctx, px + off * R, py, R * 0.15, hgt * 0.6, 0, 'rgba(255,230,120,0.8)');
+          }
+        });
+        ctx.restore();
+      }
+
+      // 湯気・煙
+      for (const p of scene.puffs) {
+        const a = (1 - p.life / p.max) * (p.kind === 'smoke' ? 0.4 : 0.15);
+        ctx.fillStyle = p.kind === 'smoke' ? 'rgba(70,70,75,' + a + ')' : 'rgba(255,255,255,' + a + ')';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 火の粉
+      for (const p of scene.sparks) {
+        ctx.fillStyle = 'rgba(255,' + Math.round(150 + 80 * Math.min(1, p.life)) + ',60,' + Math.min(1, p.life) + ')';
+        ctx.fillRect(p.x, p.y, 2, 2);
+      }
+    }
+
+    function nameOf(id) { return S.players.find((p) => p.id === id).name; }
+    function fmt(n) { return String(Math.round(n)); }
+
+    function buildOthers() {
+      const box = $('others');
+      box.textContent = '';
+      S.players.filter((p) => p.id !== S.me).forEach((p) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'other';
+        wrap.dataset.player = p.id;
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = p.name;
+        wrap.append(makeMini(), name);
+        box.append(wrap);
+      });
+    }
+
+    function render(now) {
+      if (Hitsumabushi.phase === 'over') return;
+      $('roundLabel').textContent = Math.max(1, S.round) + ' / ' + ROUNDS + ' 個目';
+      if (S.me && S.totals[S.me]) $('myTotal').textContent = '合計 ' + fmt(S.totals[S.me].sum);
+
+      let msg = '';
+      let remain = ROUND_MS;
+      if (S.stage === 'waiting') msg = 'まもなく始まります';
+      else if (S.stage === 'countdown') msg = 'よーい…';
+      else if (S.stage === 'roast') {
+        remain = Math.max(0, S.endAt - now);
+        if (S.myDone) msg = '完成！ 回して眺められます';
+        else if (S.canPlay) msg = '左右にドラッグして回す';
+        else msg = '焼いています';
+      }
+      $('timer').textContent = (remain / 1000).toFixed(1);
+      $('stageMsg').textContent = msg;
+      $('doneBtn').disabled = !(S.canPlay && S.stage === 'roast' && !S.myDone);
+
+      drawScene(now);
+      document.querySelectorAll('.other').forEach((el) => {
+        const o = S.others[el.dataset.player];
+        drawMini(el.querySelector('canvas'), o ? o.faces : new Array(FACES).fill(0), o ? o.angle : 0);
+        el.classList.toggle('done', !!(o && o.done));
+      });
+    }
+
+    // ---- 1個ぶんの進行（全員） ----
+    function applyRound(p) {
+      S.round = p.r;
+      S.stage = 'countdown';
+      S.flares = p.flares;
+      S.faces = new Array(FACES).fill(0);
+      S.burntAt = new Array(FACES).fill(null);
+      S.angle = 0;
+      S.myDone = false;
+      S.others = {};
+      S.results = {};
+      const now = Date.now();
+      S.roastStart = now + COUNTDOWN_MS;
+      S.endAt = S.roastStart + ROUND_MS;
+      $('overlay').hidden = true;
+    }
+
+    function tick(now) {
+      // 描画が間引かれても（遅い端末・ブラウザの省電力）焼ける量が実時間どおりになるよう、
+      // 前回からの実際の経過時間で進める。上限 1 秒は、タブが裏にあって長く止まっていた場合に
+      // 戻った瞬間に一気に焦げるのを防ぐため
+      const dt = lastTick === null ? 0 : Math.min(1000, now - lastTick) / 1000;
+      lastTick = now;
+      if (!S || Hitsumabushi.phase !== 'playing') return;
+
+      if (S.stage === 'countdown' && now >= S.roastStart) S.stage = 'roast';
+      if (S.stage === 'roast' && S.canPlay && !S.myDone) {
+        const mult = flareAt(now - S.roastStart) ? FLARE_MULT : 1;
+        for (let i = 0; i < FACES; i++) {
+          const before = S.faces[i];
+          S.faces[i] = Math.min(100, before + BASE_RATE * mult * heatOf(i, S.angle) * dt);
+          if (before < 100 && S.faces[i] >= 100) S.burntAt[i] = now;
+        }
+        if (now >= S.endAt) finishMine();
+        else if (now - S.lastSync >= SYNC_MS) {
+          S.lastSync = now;
+          Hitsumabushi.sendGameData({ t: 'p', m: S.match, r: S.round, a: Math.round(S.angle), f: roundFaces(S.faces) });
+        }
+      }
+      updateFx(dt, now);
+      render(now);
+    }
+
+    function roundFaces(faces) { return faces.map((v) => Math.round(v * 10) / 10); }
+
+    // 完成後も回せる（火から上げているので焼けない）。焼き上がりを自分で眺めるため
+    function rotate(deg) {
+      if (!S || !S.canPlay) return;
+      if (!(S.stage === 'roast' || (S.myDone && (S.stage === 'reveal' || S.stage === 'final')))) return;
+      S.angle = wrap360(S.angle + deg);
+    }
+
+    function finishMine() {
+      if (S.myDone || S.stage !== 'roast') return;
+      S.myDone = true;
+      S.doneAt = Date.now();
+      const f = roundFaces(S.faces);
+      S.faces = f;
+      Hitsumabushi.sendGameData({ t: 'done', m: S.match, r: S.round, f });
+      if (Hitsumabushi.isGameMaster()) recordResult(S.me, S.round, f);
+    }
+
+    // ---- 進行役だけが行うこと ----
+    function makeFlares() {
+      const n = 2 + Math.floor(Math.random() * 2);
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        // 20秒を n 等分した区間に1回ずつ。最初の3秒は強くならない
+        const span = (ROUND_MS - 3000 - FLARE_MS) / n;
+        out.push({ at: Math.round(3000 + span * i + Math.random() * (span - FLARE_MS)) });
+      }
+      return out;
+    }
+
+    function masterStartRound(r) {
+      const p = { t: 'round', m: S.match, r, flares: makeFlares() };
+      Hitsumabushi.sendGameData(p);
+      applyRound(p);
+      // 合図より後に準備ができたクライアントは、この登録から今の1個に加わる（onMatchState）
+      Hitsumabushi.setMatchState({ r, totals: S.totals, round: p });
+      later(COUNTDOWN_MS + ROUND_MS + GRACE_MS, () => masterReveal(r));
+    }
+
+    function recordResult(id, r, faces) {
+      if (r !== S.round || S.revealed >= r) return;
+      S.results[id] = faces;
+      if (S.players.every((p) => S.results[p.id])) masterReveal(r);
+    }
+
+    function masterReveal(r) {
+      if (S.revealed >= r || Hitsumabushi.phase !== 'playing') return;
+      S.revealed = r;
+      // 結果が届かなかったプレイヤーは 0 点。発表で「記録なし」と表示する
+      const results = {};
+      S.players.forEach((p) => {
+        const f = S.results[p.id] || null;
+        const score = f ? marshScore(f) : 0;
+        const burnt = f ? burntCount(f) : 0;
+        const t = S.totals[p.id];
+        t.sum += score;
+        t.burnt += burnt;
+        t.last = score;
+        results[p.id] = { f, score, burnt };
+      });
+      const p = { t: 'reveal', m: S.match, r, results, totals: S.totals };
+      Hitsumabushi.sendGameData(p);
+      applyReveal(p);
+      Hitsumabushi.setMatchState({ r, totals: S.totals, results });
+      if (r < ROUNDS) later(REVEAL_MS, () => masterStartRound(r + 1));
+      else later(REVEAL_MS, finishMatch);
+    }
+
+    // 合計点 → 焦げた面の少なさ → 最後の1個の点 → 席順。
+    // rankings は同着を表せないため、最後は席順で並べる（企画メモ「同点の扱い」）
+    function ranking(totals) {
+      const order = S.players.map((p) => p.id);
+      return order.slice().sort((a, b) => {
+        const x = totals[a];
+        const y = totals[b];
+        return (y.sum - x.sum) || (x.burnt - y.burnt) || (y.last - x.last) || (order.indexOf(a) - order.indexOf(b));
+      });
+    }
+    function allTied(totals) {
+      const t0 = totals[S.players[0].id];
+      return S.players.every((p) => {
+        const t = totals[p.id];
+        return t.sum === t0.sum && t.burnt === t0.burnt && t.last === t0.last;
+      });
+    }
+
+    function finishMatch() {
+      if (Hitsumabushi.phase !== 'playing') return;
+      const scores = {};
+      S.players.forEach((p) => { scores[p.id] = Math.round(S.totals[p.id].sum * 10) / 10; });
+      if (allTied(S.totals)) {
+        Hitsumabushi.sendGameOver({ isTie: true, winnerPlayerId: null, scores });
+      } else {
+        const rankings = ranking(S.totals);
+        Hitsumabushi.sendGameOver({ winnerPlayerId: rankings[0], rankings, scores });
+      }
+    }
+
+    // ---- 結果発表（全員）。切り口の外周で全面の焼き色を見せる ----
+    function applyReveal(p) {
+      S.stage = p.r === ROUNDS ? 'final' : 'reveal';
+      S.totals = p.totals;
+      const box = $('resultBox');
+      box.textContent = '';
+      const h = document.createElement('h2');
+      h.textContent = p.r === ROUNDS ? '最終結果' : p.r + ' 個目の焼き上がり';
+      box.append(h);
+      const ids = p.r === ROUNDS ? ranking(p.totals) : S.players.map((x) => x.id);
+      ids.forEach((id, i) => {
+        const res = p.results[id];
+        const row = document.createElement('div');
+        row.className = 'row' + (res.f ? '' : ' missing');
+        const faces = res.f || new Array(FACES).fill(0);
+        const mini = makeMini();
+        drawMini(mini, faces, 0);
+        const who = document.createElement('div');
+        who.className = 'who';
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.textContent = res.f
+          ? (res.burnt > 0 ? '焦げた面 ' + res.burnt : '焦げなし') + ' ・ 合計 ' + fmt(p.totals[id].sum)
+          : '記録なし（通信が届きませんでした）';
+        who.append((p.r === ROUNDS ? (i + 1) + '位 ' : '') + nameOf(id) + (id === S.me ? '（あなた）' : ''), sub);
+        const pts = document.createElement('div');
+        pts.className = 'pts';
+        pts.textContent = p.r === ROUNDS ? fmt(p.totals[id].sum) : fmt(res.score);
+        row.append(mini, who, pts);
+        box.append(row);
+      });
+      $('overlay').hidden = false;
+    }
+
+    Hitsumabushi.init({
+      onCreateMatch: () => {
+        // ドラッグで回す。指でもマウスでも同じ操作
+        let dragX = null;
+        const arena = $('arena');
+        const canvas = $('scene');
+        // canvas 上の指の操作でページがスクロール・ズームしないようにする
+        canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+        canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+        arena.addEventListener('pointerdown', (e) => {
+          dragX = e.clientX;
+          if (arena.setPointerCapture) arena.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        });
+        arena.addEventListener('pointermove', (e) => {
+          if (dragX === null) return;
+          rotate((e.clientX - dragX) * DEG_PER_PX);
+          dragX = e.clientX;
+          e.preventDefault();
+        });
+        const end = () => { dragX = null; };
+        arena.addEventListener('pointerup', end);
+        arena.addEventListener('pointercancel', end);
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowRight') rotate(KEY_STEP_DEG);
+          else if (e.key === 'ArrowLeft') rotate(-KEY_STEP_DEG);
+        });
+        $('doneBtn').addEventListener('click', finishMine);
+
+        new ResizeObserver(fitScene).observe(arena);
+
+        const loop = () => {
+          tick(Date.now());
+          requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+      },
+
+      // 毎試合（リマッチ含む）の開始時。試合の状態・タイマー・表示はすべてここで作り直す
+      onStartMatch: (config) => {
+        clearTimers();
+        lastTick = null;
+        S = newState(config);
+        scene.sparks = [];
+        scene.puffs = [];
+        document.body.classList.toggle('spectating', !S.canPlay);
+        document.body.classList.toggle('transparent', !!config.isObsMode);
+        $('overlay').hidden = true;
+        $('resultBox').textContent = '';
+        buildOthers();
+        render(Date.now());
+        if (Hitsumabushi.isGameMaster()) masterStartRound(1);
+      },
+
+      // 途中から参加したとき（観戦者・再接続・開始の合図に間に合わなかったクライアント）。
+      // 焼いている最中なら今の1個に加わり（制限時間は受け取った時点から数える）、
+      // 発表中なら発表を表示して次の1個を待つ
+      onMatchState: (state) => {
+        S.round = state.r;
+        S.totals = state.totals;
+        if (state.results) applyReveal({ r: state.r, results: state.results, totals: state.totals });
+        else applyRound(state.round);
+      },
+
+      onGameData: (p, senderId) => {
+        if (Hitsumabushi.phase === 'over') return;
+        if (!S || p.m !== S.match) return;
+        if (p.t === 'p' && p.r === S.round) {
+          S.others[senderId] = { faces: p.f, angle: p.a, done: false };
+        } else if (p.t === 'done' && p.r === S.round) {
+          const prev = S.others[senderId];
+          S.others[senderId] = { faces: p.f, angle: prev ? prev.angle : 0, done: true };
+          if (Hitsumabushi.isGameMaster()) recordResult(senderId, p.r, p.f);
+        } else if (p.t === 'round') {
+          applyRound(p);
+        } else if (p.t === 'reveal') {
+          applyReveal(p);
+        }
+      },
+    });
+  </script>
+</body>
+</html>

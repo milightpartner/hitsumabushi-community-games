@@ -1,0 +1,16 @@
+{
+  "$schema": "https://milightpartner.jp/schemas/game-manifest-1.json",
+  "gameId": "marshmallow-roast",
+  "title": "マシュマロ焼き",
+  "version": "0.1.0",
+  "players": {
+    "min": 2,
+    "max": 8,
+    "type": "variable"
+  },
+  "creator": "milightpartner",
+  "resultModel": {
+    "type": "ranked",
+    "allowTie": true
+  }
+}
